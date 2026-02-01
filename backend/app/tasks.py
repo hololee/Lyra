@@ -29,12 +29,16 @@ def create_environment_task(self, environment_id):
         env.status = "building"
         db.commit()
 
+        print(f"[Task] Processing environment {env.id}")
+        print(f"[Task] Dockerfile content length: {len(env.dockerfile_content) if env.dockerfile_content else 0}")
+
         client = docker.from_env()
 
         # 1. Build Image from user-provided Dockerfile
         image_name = f"lyra-custom-{str(env.id)}"
 
         if env.dockerfile_content:
+            print(f"[Task] Building custom image {image_name}...")
             try:
                 with tempfile.TemporaryDirectory() as temp_dir:
                     dockerfile_path = os.path.join(temp_dir, 'Dockerfile')
@@ -44,7 +48,9 @@ def create_environment_task(self, environment_id):
                     # Build image
                     # Note: This might block for a while
                     client.images.build(path=temp_dir, tag=image_name, rm=True)
+                print("[Task] Custom image built successfully.")
             except Exception as build_error:
+                print(f"[Task] Build failed: {build_error}")
                 env.status = "error"
                 db.commit()
                 return f"Failed to build image: {str(build_error)}"
