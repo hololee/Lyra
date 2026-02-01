@@ -1,6 +1,6 @@
 import Editor from '@monaco-editor/react';
 import axios from 'axios';
-import { Clock, FileCode, Play, Trash2 } from 'lucide-react';
+import { AlertCircle, Clock, FileCode, Play, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Modal from '../components/Modal';
@@ -163,7 +163,7 @@ export default function Templates() {
       ) : templates.length === 0 ? (
           <div className="bg-[#18181b] rounded-xl border border-[#27272a] p-12 text-center text-gray-400 flex flex-col items-center gap-4">
             <div className="p-4 bg-[#27272a] rounded-full">
-                <FileCode size={32} className="text-gray-500" />
+                <AlertCircle size={32} className="text-amber-500" />
             </div>
             <div>
                 <h3 className="text-lg font-semibold text-white mb-1">No Templates Found</h3>
