@@ -20,7 +20,7 @@ repos:
     hooks:
       - id: pytest
         name: Backend Tests (pytest)
-        entry: bash -c "cd backend && export PYTHONPATH=$PYTHONPATH:. && pytest"
+        entry: bash -c "cd backend && export PYTHONPATH=$PYTHONPATH:. && python3 -m pytest"
         language: system
         types: [python]
         pass_filenames: false
@@ -33,7 +33,7 @@ repos:
         name: Frontend Lint (eslint)
         entry: bash -c "cd frontend && npm run lint"
         language: system
-        types: [ts, tsx, jsx, javascript]
+        types_or: [ts, tsx, jsx, javascript]
         pass_filenames: false
         files: ^frontend/
 
@@ -41,6 +41,6 @@ repos:
         name: Frontend Type Check & Build
         entry: bash -c "cd frontend && npm run build"
         language: system
-        types: [ts, tsx, jsx, javascript, css, html]
+        types_or: [ts, tsx, jsx, javascript, css, html]
         pass_filenames: false
         files: ^frontend/
