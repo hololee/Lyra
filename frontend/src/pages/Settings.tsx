@@ -31,13 +31,13 @@ export default function Settings() {
       try {
         setIsSettingsLoading(true);
         const keys = ['ssh_port', 'ssh_username', 'ssh_auth_method', 'ssh_password'];
-        const settings: any = {};
+        const settings: Record<string, string> = {};
 
         await Promise.all(keys.map(async (key) => {
           try {
             const res = await axios.get(`settings/${key}`);
             settings[key] = res.data.value;
-          } catch (e) {
+          } catch {
             // Setting might not exist yet
           }
         }));
@@ -99,30 +99,41 @@ export default function Settings() {
   const handleSaveSsh = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      setStatus({ type: 'loading' });
+      if (!sshSettings.username.trim()) {
+        setStatus({ type: 'error', message: 'Username is required.' });
+        return;
+      }
 
       const updates = [
+        { key: 'ssh_host', value: window.location.hostname },
         { key: 'ssh_port', value: sshSettings.port },
         { key: 'ssh_username', value: sshSettings.username },
         { key: 'ssh_auth_method', value: sshSettings.authMethod },
-        { key: 'ssh_password', value: sshSettings.password },
       ];
+
+      if (sshSettings.authMethod === 'password') {
+        if (!sshSettings.password.trim()) {
+          setStatus({ type: 'error', message: 'Password is required.' });
+          return;
+        }
+        updates.push({ key: 'ssh_password', value: sshSettings.password });
+      }
 
       // Handle Key Encryption and Storage
       if (sshSettings.authMethod === 'key') {
-        if (sshSettings.privateKey && sshSettings.masterPassword) {
+        if (sshSettings.privateKey) {
+            if (!sshSettings.masterPassword) {
+                setStatus({ type: 'error', message: 'Master passphrase is required for encryption.' });
+                return;
+            }
             const encrypted = await encrypt(sshSettings.privateKey, sshSettings.masterPassword);
             localStorage.setItem('ssh_private_key_encrypted', encrypted);
             localStorage.setItem('ssh_key_name', sshSettings.keyName);
-        } else if (sshSettings.keyName && !sshSettings.privateKey) {
-            // Updating other info while keep using existing encrypted key
         } else if (!sshSettings.keyName) {
             setStatus({ type: 'error', message: 'Please select an SSH key file.' });
             return;
-        } else if (!sshSettings.masterPassword) {
-            setStatus({ type: 'error', message: 'Master passphrase is required for encryption.' });
-            return;
         }
+        // If they have keyName but no privateKey in state, it means they are using existing key
       }
 
       await Promise.all(updates.map(u => axios.put(`settings/${u.key}`, { value: u.value })));
@@ -139,7 +150,7 @@ export default function Settings() {
     try {
       setStatus({ type: 'loading', message: 'Testing connection...' });
 
-      let keyToTest = sshSettings.privateKey;
+      const keyToTest = sshSettings.privateKey;
       if (sshSettings.authMethod === 'key' && !keyToTest) {
           setStatus({ type: 'error', message: 'Please pick a key file to test.' });
           return;
@@ -159,8 +170,9 @@ export default function Settings() {
       } else {
         setStatus({ type: 'error', message: `Connection Failed: ${res.data.message}` });
       }
-    } catch (error: any) {
-      setStatus({ type: 'error', message: `Test failed: ${error.message}` });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      setStatus({ type: 'error', message: `Test failed: ${message}` });
     }
   };
 
@@ -261,18 +273,34 @@ export default function Settings() {
               </div>
             )}
 
-            <div className="pt-4 border-t border-[#3f3f46] flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div className="flex items-center gap-2">
-                {status.message && (
-                  <div className={`flex items-center gap-2 text-sm ${status.type === 'success' ? 'text-green-400' : 'text-red-400'}`}>
-                    {status.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
-                    {status.message}
-                  </div>
-                )}
-              </div>
-              <div className="flex gap-4 w-full sm:w-auto">
-                <button type="button" onClick={handleTestSsh} className="flex-1 sm:flex-none bg-[#3f3f46] hover:bg-[#52525b] text-white px-6 py-2.5 rounded-lg font-medium">Test Connection</button>
-                <button type="submit" disabled={status.type === 'loading'} className="flex-1 sm:flex-none bg-blue-600 hover:bg-blue-500 text-white px-8 py-2.5 rounded-lg font-medium flex items-center justify-center gap-2"><Save size={18} />Save</button>
+            <div className="pt-6 border-t border-[#3f3f46] flex flex-col gap-4">
+              {status.message && (
+                <div className={`flex items-center gap-2 text-sm p-3 rounded-lg border ${
+                  status.type === 'success'
+                    ? 'text-green-400 bg-green-500/5 border-green-500/20'
+                    : 'text-red-400 bg-red-500/5 border-red-500/20'
+                }`}>
+                  {status.type === 'success' ? <CheckCircle2 size={18} className="shrink-0" /> : <AlertCircle size={18} className="shrink-0" />}
+                  <span className="font-medium">{status.message}</span>
+                </div>
+              )}
+
+              <div className="flex flex-col sm:flex-row items-center justify-end gap-4">
+                <button
+                  type="button"
+                  onClick={handleTestSsh}
+                  className="w-full sm:w-auto bg-[#3f3f46] hover:bg-[#52525b] text-white px-6 py-2.5 rounded-lg font-medium transition-all"
+                >
+                  Test Connection
+                </button>
+                <button
+                  type="submit"
+                  disabled={status.type === 'loading'}
+                  className="w-full sm:w-auto bg-blue-600 hover:bg-blue-500 text-white px-10 py-2.5 rounded-lg font-medium flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Save size={18} />
+                  Save Settings
+                </button>
               </div>
             </div>
           </form>

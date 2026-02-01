@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { AlertCircle, Lock, Settings as SettingsIcon, Terminal as TerminalIcon, Unlock } from 'lucide-react';
+import { AlertCircle, Lock, Settings as SettingsIcon, Unlock } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Terminal } from 'xterm';
@@ -42,7 +42,7 @@ export default function TerminalPage() {
             if (method !== 'key') {
                 setIsUnlocked(true); // Don't need password if not using key
             }
-        } catch (e) {
+        } catch {
             setIsConfigured(false);
         }
     };
@@ -97,7 +97,7 @@ export default function TerminalPage() {
             try {
                 privateKey = await decrypt(encrypted, masterPassword);
                 term.write('\x1b[32m[Key Decrypted Successfully]\x1b[0m\r\n');
-            } catch (e) {
+            } catch {
                 term.write('\r\n\x1b[31m[Decryption Failed: Invalid Passphrase]\x1b[0m\r\n');
                 ws.close();
                 return;
@@ -149,7 +149,7 @@ export default function TerminalPage() {
       ws.close();
       term.dispose();
     };
-  }, [isUnlocked, isConfigured]);
+  }, [isUnlocked, isConfigured, authMethod, masterPassword]);
 
   const handleUnlock = (e: React.FormEvent) => {
     e.preventDefault();
@@ -243,13 +243,8 @@ export default function TerminalPage() {
     <div className="p-8 h-full flex flex-col space-y-8 bg-[#18181b]">
       <header className="flex justify-between items-center">
         <div>
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-500/10 rounded-lg text-blue-400">
-                <TerminalIcon size={24} />
-            </div>
-            <h2 className="text-3xl font-bold text-white">Terminal</h2>
-          </div>
-          <p className="text-gray-400 mt-1 ml-11">Direct access to host shell via SSH</p>
+          <h2 className="text-3xl font-bold text-white">Terminal</h2>
+          <p className="text-gray-400 mt-1">Direct access to host shell via SSH</p>
         </div>
         <div className="flex items-center gap-2 text-xs text-gray-400 bg-[#27272a] px-3 py-1.5 rounded-full border border-[#3f3f46]">
           <span className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]"></span>

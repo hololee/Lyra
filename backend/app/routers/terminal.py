@@ -36,6 +36,10 @@ async def test_ssh_connection(req: SshTestRequest):
         ssh_client = paramiko.SSHClient()
         ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
+        target_host = req.host
+        if target_host in ["localhost", "127.0.0.1"]:
+            target_host = "host.docker.internal"
+
         if req.authMethod == "key" and req.privateKey:
             key_file = io.StringIO(req.privateKey)
             try:
@@ -47,9 +51,9 @@ async def test_ssh_connection(req: SshTestRequest):
                 except Exception:
                     key_file.seek(0)
                     pkey = paramiko.PKey.from_private_key(key_file)
-            ssh_client.connect(req.host, port=req.port, username=req.username, pkey=pkey, timeout=5)
+            ssh_client.connect(target_host, port=req.port, username=req.username, pkey=pkey, timeout=5)
         else:
-            ssh_client.connect(req.host, port=req.port, username=req.username, password=req.password, timeout=5)
+            ssh_client.connect(target_host, port=req.port, username=req.username, password=req.password, timeout=5)
 
         ssh_client.close()
         return {"status": "success", "message": "Successfully connected to host."}
@@ -91,6 +95,10 @@ async def websocket_terminal(websocket: WebSocket, db: AsyncSession = Depends(ge
         rows = init_data.get("rows", 24)
 
         if ssh_host and ssh_user:
+            target_host = ssh_host
+            if target_host in ["localhost", "127.0.0.1"]:
+                target_host = "host.docker.internal"
+
             try:
                 ssh_client = paramiko.SSHClient()
                 ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -106,9 +114,9 @@ async def websocket_terminal(websocket: WebSocket, db: AsyncSession = Depends(ge
                         except Exception:
                             key_file.seek(0)
                             pkey = paramiko.PKey.from_private_key(key_file)
-                    ssh_client.connect(ssh_host, port=ssh_port, username=ssh_user, pkey=pkey, timeout=10)
+                    ssh_client.connect(target_host, port=ssh_port, username=ssh_user, pkey=pkey, timeout=10)
                 else:
-                    ssh_client.connect(ssh_host, port=ssh_port, username=ssh_user, password=ssh_password, timeout=10)
+                    ssh_client.connect(target_host, port=ssh_port, username=ssh_user, password=ssh_password, timeout=10)
 
                 chan = ssh_client.invoke_shell(term='xterm-256color', width=cols, height=rows)
                 chan.setblocking(0)
@@ -144,7 +152,8 @@ async def websocket_terminal(websocket: WebSocket, db: AsyncSession = Depends(ge
                     if chan:
                         if chan.recv_ready():
                             data = chan.recv(10240)
-                            if not data: break
+                            if not data:
+                                break
                             await websocket.send_bytes(data)
                         else:
                             await asyncio.sleep(0.01)
@@ -167,7 +176,11 @@ async def websocket_terminal(websocket: WebSocket, db: AsyncSession = Depends(ge
     except Exception as e:
         logger.error(f"Terminal error: {e}")
     finally:
-        if chan: chan.close()
-        if ssh_client: ssh_client.close()
-        try: await websocket.close()
-        except: pass
+        if chan:
+            chan.close()
+        if ssh_client:
+            ssh_client.close()
+        try:
+            await websocket.close()
+        except Exception:
+            pass
