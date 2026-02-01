@@ -115,7 +115,8 @@ export default function Provisioning() {
         container_user: 'root',
         root_password: password,
         mount_config: validMounts,
-        dockerfile_content: dockerfile
+        dockerfile_content: dockerfile,
+        gpu_count: gpuCount
       };
 
       // Relative path works thanks to Nginx proxy

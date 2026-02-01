@@ -93,10 +93,21 @@ def create_environment_task(self, environment_id):
         # But if we want to simulate "claiming" them, we just don't pass them to docker if they don't exist.
 
         if env.gpu_indices:
-            # Only add if we are on a linux host with nvidia runtime,
-            # otherwise this will fail on Mac.
-            # We check client info or just Wrap in try-except for the run.
-            pass
+            # Add DeviceRequests for NVIDIA GPUs with specific indices
+            # Convert indices to string for device_ids
+            gpu_ids = [str(i) for i in env.gpu_indices]
+
+            device_requests = [
+                docker.types.DeviceRequest(
+                    device_ids=gpu_ids,
+                    capabilities=[["gpu"]],
+                    driver="nvidia"
+                )
+            ]
+            container_config["device_requests"] = device_requests
+            # Note: Explicitly assigning specific GPU indices (e.g. device_ids=["0", "1"])
+            # works if capabilities=[["gpu"]]. For simplicity with 'count', we assume generic allocation.
+            # If we want specific indices, device_requests are constructed as above.
 
         client.containers.run(**container_config)
 
