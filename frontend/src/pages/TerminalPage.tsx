@@ -1,7 +1,10 @@
-import { useEffect, useRef } from 'react';
+import axios from 'axios';
+import { AlertCircle, Lock, Unlock } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import 'xterm/css/xterm.css';
+import { decrypt } from '../utils/crypto';
 
 export default function TerminalPage() {
   const terminalRef = useRef<HTMLDivElement>(null);
@@ -9,8 +12,30 @@ export default function TerminalPage() {
   const fitAddonInstance = useRef<FitAddon | null>(null);
   const wsInstance = useRef<WebSocket | null>(null);
 
+  const [isUnlocked, setIsUnlocked] = useState(false);
+  const [masterPassword, setMasterPassword] = useState('');
+  const [error, setError] = useState('');
+  const [authMethod, setAuthMethod] = useState<string | null>(null);
+
+  // Check auth method first
   useEffect(() => {
-    if (!terminalRef.current) return;
+    const checkAuth = async () => {
+        try {
+            const res = await axios.get('/settings/ssh_auth_method');
+            setAuthMethod(res.data.value);
+            if (res.data.value !== 'key') {
+                setIsUnlocked(true); // Don't need password if not using key
+            }
+        } catch (e) {
+            setAuthMethod('password');
+            setIsUnlocked(true);
+        }
+    };
+    checkAuth();
+  }, []);
+
+  useEffect(() => {
+    if (!isUnlocked || !terminalRef.current) return;
 
     // Initialize Terminal
     const term = new Terminal({
@@ -33,13 +58,7 @@ export default function TerminalPage() {
     termInstance.current = term;
     fitAddonInstance.current = fitAddon;
 
-    // WebSocket Connection
-    // Use relative path to work with both local dev (proxy) and production (nginx)
-    // For local dev without proxy, you might need a conditional, but for this "Docker Compose" task, we use relative.
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    // If running strictly in dev mode (port 5173 -> 8000), we might need localhost:8000 override.
-    // However, if we serve via Nginx, relative is correct.
-    // To support both:
     const wsUrl = import.meta.env.DEV
         ? 'ws://localhost:8000/terminal/ws'
         : `${protocol}//${window.location.host}/terminal/ws`;
@@ -47,20 +66,39 @@ export default function TerminalPage() {
     const ws = new WebSocket(wsUrl);
     wsInstance.current = ws;
 
-    ws.binaryType = 'blob'; // or 'arraybuffer'
+    ws.binaryType = 'blob';
 
-    ws.onopen = () => {
-        term.write('\r\n\x1b[32m[Connected to Host]\x1b[0m\r\n');
-        // Send initial size
-        const dims = { cols: term.cols, rows: term.rows };
-        ws.send(`RESIZE:${dims.rows},${dims.cols}`);
+    ws.onopen = async () => {
+        term.write('\r\n\x1b[32m[Connected to Terminal Service]\x1b[0m\r\n');
+
+        let privateKey = '';
+        if (authMethod === 'key') {
+            const encrypted = localStorage.getItem('ssh_private_key_encrypted');
+            if (encrypted) {
+                try {
+                    privateKey = await decrypt(encrypted, masterPassword);
+                    term.write('\x1b[32m[Key Decrypted Successfully]\x1b[0m\r\n');
+                } catch (e) {
+                    term.write('\r\n\x1b[31m[Decryption Failed: Invalid Passphrase]\x1b[0m\r\n');
+                    ws.close();
+                    return;
+                }
+            }
+        }
+
+        const initData = {
+            type: 'INIT',
+            privateKey: privateKey,
+            rows: term.rows,
+            cols: term.cols
+        };
+        ws.send(JSON.stringify(initData));
     };
 
     ws.onmessage = (event) => {
         if (typeof event.data === 'string') {
              term.write(event.data);
         } else {
-            // Handle blob
             const reader = new FileReader();
             reader.onload = () => {
                 term.write(reader.result as string);
@@ -79,7 +117,6 @@ export default function TerminalPage() {
         }
     });
 
-    // Handle Window Resize
     const handleResize = () => {
         fitAddon.fit();
         if (ws.readyState === WebSocket.OPEN) {
@@ -94,7 +131,62 @@ export default function TerminalPage() {
       ws.close();
       term.dispose();
     };
-  }, []);
+  }, [isUnlocked]);
+
+  const handleUnlock = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!masterPassword) {
+        setError('Please enter your master passphrase.');
+        return;
+    }
+    setError('');
+    setIsUnlocked(true);
+  };
+
+  if (!isUnlocked) {
+    return (
+        <div className="h-full flex items-center justify-center bg-[#18181b] p-6">
+            <div className="max-w-md w-full bg-[#27272a] rounded-2xl border border-[#3f3f46] p-8 shadow-2xl">
+                <div className="flex flex-col items-center text-center space-y-4">
+                    <div className="w-16 h-16 bg-blue-500/10 rounded-full flex items-center justify-center text-blue-400 mb-2">
+                        <Lock size={32} />
+                    </div>
+                    <h2 className="text-2xl font-bold text-white">Terminal Locked</h2>
+                    <p className="text-gray-400">Enter your master passphrase to decrypt your SSH key and connect.</p>
+
+                    <form onSubmit={handleUnlock} className="w-full space-y-4 mt-6">
+                        <div className="relative">
+                            <input
+                                type="password"
+                                autoFocus
+                                value={masterPassword}
+                                onChange={(e) => setMasterPassword(e.target.value)}
+                                placeholder="Master Passphrase"
+                                className="w-full bg-[#18181b] border border-[#3f3f46] rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition-all pl-11"
+                            />
+                            <Unlock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" />
+                        </div>
+
+                        {error && (
+                            <div className="flex items-center gap-2 text-red-400 text-sm">
+                                <AlertCircle size={16} />
+                                {error}
+                            </div>
+                        )}
+
+                        <button
+                            type="submit"
+                            className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2"
+                        >
+                            <Unlock size={18} />
+                            Unlock & Connect
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    );
+  }
 
   return (
     <div className="p-8 h-full flex flex-col space-y-8 bg-[#18181b]">
