@@ -5,6 +5,14 @@
   /* Add more custom theme variables here */
 }
 
+@layer base {
+  html, body {
+    @apply bg-[#18181b] text-white;
+    margin: 0;
+    padding: 0;
+  }
+}
+
 /* Custom Utilities */
 .glass {
     background: rgba(24, 24, 27, 0.7);
