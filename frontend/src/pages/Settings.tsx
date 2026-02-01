@@ -179,13 +179,13 @@ export default function Settings() {
   const isLoading = appLoading || isSettingsLoading;
 
   return (
-    <div className="p-8 space-y-8 max-w-5xl mx-auto">
+    <div className="p-8 space-y-8 max-w-7xl mx-auto">
       <div>
         <h2 className="text-3xl font-bold text-white">Settings</h2>
         <p className="text-gray-400 mt-1">Configure your application preferences and host access</p>
       </div>
 
-      <div className="space-y-8">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 items-start">
         {/* Branding Section */}
         <section className="bg-[#27272a] rounded-xl border border-[#3f3f46] overflow-hidden shadow-xl">
           <div className="p-6 border-b border-[#3f3f46]">
@@ -221,8 +221,8 @@ export default function Settings() {
           </div>
 
           <form onSubmit={handleSaveSsh} className="p-6 space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <div className="col-span-1 sm:col-span-2 space-y-2">
                 <label className="text-sm font-medium text-gray-300">Host Address</label>
                 <div className="w-full bg-[#18181b]/50 border border-[#3f3f46] rounded-lg px-4 py-2.5 text-gray-400 text-sm flex items-center gap-2 overflow-hidden">
                   <Server size={14} /> {window.location.hostname}
@@ -237,7 +237,7 @@ export default function Settings() {
                 <label className="text-sm font-medium text-gray-300">Username</label>
                 <input type="text" value={sshSettings.username} onChange={e => setSshSettings({...sshSettings, username: e.target.value})} className="w-full bg-[#18181b] border border-[#3f3f46] rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500" />
               </div>
-              <div className="space-y-2">
+              <div className="col-span-1 sm:col-span-2 space-y-2">
                 <label className="text-sm font-medium text-gray-300">Authentication Method</label>
                 <div className="flex gap-4 p-1 bg-[#18181b] rounded-lg border border-[#3f3f46]">
                   <button type="button" onClick={() => setSshSettings({...sshSettings, authMethod: 'password'})} className={`flex-1 py-1.5 rounded-md text-sm font-medium transition-all ${sshSettings.authMethod === 'password' ? 'bg-[#3f3f46] text-white' : 'text-gray-400'}`}>Password</button>
