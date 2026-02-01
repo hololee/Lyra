@@ -5,6 +5,7 @@ import { FolderOpen, Play, Plus, Save, Trash2, Upload } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import Modal from '../components/Modal';
+import { useToast } from '../context/ToastContext';
 
 interface MountPoint {
   host_path: string;
@@ -15,6 +16,7 @@ interface MountPoint {
 export default function Provisioning() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { showToast } = useToast();
   const [name, setName] = useState('');
   const [password, setPassword] = useState('admin');
 
@@ -154,11 +156,42 @@ export default function Provisioning() {
           setIsSaveModalOpen(false);
           setTemplateName('');
           setTemplateDesc('');
-          showAlert("Success", "Template saved successfully!");
+          showToast("Template saved successfully!", "success");
       } catch (error) {
           console.error("Failed to save template", error);
-          showAlert("Error", "Failed to save template.");
+          showToast("Failed to save template.", "error");
       }
+  };
+
+  // Template Load State
+  interface Template {
+      id: string;
+      name: string;
+      description: string;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      config: any;
+      created_at: string;
+  }
+  const [isLoadModalOpen, setIsLoadModalOpen] = useState(false);
+  const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
+  const [templates, setTemplates] = useState<Template[]>([]);
+
+  useEffect(() => {
+      if (isLoadModalOpen) {
+          fetchTemplates();
+      }
+  }, [isLoadModalOpen]);
+
+  const fetchTemplates = async () => {
+    try {
+      setIsLoadingTemplates(true);
+      const res = await axios.get('templates/');
+      setTemplates(res.data);
+    } catch (error) {
+      console.error("Failed to fetch templates", error);
+    } finally {
+      setIsLoadingTemplates(false);
+    }
   };
 
   return (
@@ -412,7 +445,7 @@ export default function Provisioning() {
                 </div>
                 <div className="flex gap-2">
                     <button
-                        onClick={() => showAlert("Coming Soon", "Template loading functionality will be implemented soon.")}
+                        onClick={() => setIsLoadModalOpen(true)}
                         className="px-3 py-1.5 bg-[#27272a] hover:bg-[#3f3f46] text-gray-300 hover:text-white rounded-md flex items-center gap-2 transition-colors border border-[#3f3f46] text-xs font-medium"
                     >
                         <Upload size={14} />
@@ -427,7 +460,6 @@ export default function Provisioning() {
                     </button>
                 </div>
              </div>
-
              <div className="flex-1 relative">
                 <Editor
                     height="100%"
@@ -446,6 +478,69 @@ export default function Provisioning() {
              </div>
         </div>
       </div>
+
+      {/* Load Template Modal */}
+      {isLoadModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+            <div className="bg-[#18181b] rounded-xl border border-[#3f3f46] shadow-2xl w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in duration-200 flex flex-col max-h-[80vh]">
+                <div className="p-6 border-b border-[#27272a] flex justify-between items-center">
+                    <h3 className="text-xl font-bold text-white">Load Template</h3>
+                </div>
+
+                <div className="p-4 overflow-y-auto space-y-3 flex-1 bg-[#18181b]">
+                    {isLoadingTemplates ? (
+                         <div className="text-center py-10">
+                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-2"></div>
+                            <p className="text-gray-400 text-sm">Loading templates...</p>
+                        </div>
+                    ) : templates.length === 0 ? (
+                        <div className="text-center py-10 text-gray-400">
+                            <p>No templates found.</p>
+                        </div>
+                    ) : (
+                        templates.map((template) => (
+                             <div key={template.id} className="bg-[#202023] rounded-lg border border-[#3f3f46] p-4 flex items-center justify-between group hover:border-[#52525b] transition-all">
+                                <div className="min-w-0 flex-1 mr-4">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <h4 className="font-bold text-white truncate">{template.name}</h4>
+                                        <span className="text-[10px] bg-[#27272a] text-gray-500 px-1.5 py-0.5 rounded border border-[#3f3f46]">
+                                            {new Date(template.created_at).toLocaleDateString()}
+                                        </span>
+                                    </div>
+                                    <p className="text-xs text-gray-400 truncate">
+                                        {template.description || "No description"}
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={() => {
+                                        if (template.config.dockerfile_content) {
+                                            setDockerfile(template.config.dockerfile_content);
+                                            setIsLoadModalOpen(false);
+                                            showToast("Template loaded successfully!", "success");
+                                        } else {
+                                            showToast("This template has no Dockerfile content.", "error");
+                                        }
+                                    }}
+                                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-md transition-colors flex items-center gap-1.5 shadow-lg shadow-blue-500/20"
+                                >
+                                    <Upload size={12} /> Load
+                                </button>
+                             </div>
+                        ))
+                    )}
+                </div>
+
+                <div className="p-4 border-t border-[#3f3f46] bg-[#27272a]/50 flex justify-end">
+                    <button
+                        onClick={() => setIsLoadModalOpen(false)}
+                        className="px-4 py-2 rounded-lg text-sm font-medium text-gray-400 hover:text-white hover:bg-[#3f3f46] transition-colors"
+                    >
+                        Close
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
     </div>
   );
 }
