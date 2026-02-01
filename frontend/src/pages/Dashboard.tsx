@@ -22,7 +22,7 @@ export default function Dashboard() {
   const fetchEnvironments = async () => {
     try {
       setLoading(true);
-      const res = await axios.get('/environments/');
+      const res = await axios.get('environments/');
       setEnvironments(res.data);
     } catch (error) {
       console.error("Failed to fetch environments", error);
@@ -34,7 +34,7 @@ export default function Dashboard() {
   const deleteEnvironment = async () => {
     if (!deleteId) return;
     try {
-        await axios.delete(`/environments/${deleteId}`);
+        await axios.delete(`environments/${deleteId}`);
         fetchEnvironments();
     } catch (error) {
         console.error("Failed to delete environment", error);

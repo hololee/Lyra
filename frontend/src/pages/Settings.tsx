@@ -35,7 +35,7 @@ export default function Settings() {
 
         await Promise.all(keys.map(async (key) => {
           try {
-            const res = await axios.get(`/settings/${key}`);
+            const res = await axios.get(`settings/${key}`);
             settings[key] = res.data.value;
           } catch (e) {
             // Setting might not exist yet
@@ -125,7 +125,7 @@ export default function Settings() {
         }
       }
 
-      await Promise.all(updates.map(u => axios.put(`/settings/${u.key}`, { value: u.value })));
+      await Promise.all(updates.map(u => axios.put(`settings/${u.key}`, { value: u.value })));
 
       setStatus({ type: 'success', message: 'SSH settings updated! Key is encrypted in your browser.' });
       setTimeout(() => setStatus({ type: 'idle' }), 3000);
@@ -145,7 +145,7 @@ export default function Settings() {
           return;
       }
 
-      const res = await axios.post('/terminal/test-ssh', {
+      const res = await axios.post('terminal/test-ssh', {
         host: window.location.hostname,
         port: parseInt(sshSettings.port),
         username: sshSettings.username,

@@ -24,8 +24,8 @@ export default function TerminalPage() {
     const checkAuth = async () => {
         try {
             const [methodRes, userRes] = await Promise.all([
-                axios.get('/settings/ssh_auth_method'),
-                axios.get('/settings/ssh_username')
+                axios.get('settings/ssh_auth_method'),
+                axios.get('settings/ssh_username')
             ]);
 
             const method = methodRes.data.value;
@@ -75,8 +75,8 @@ export default function TerminalPage() {
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = import.meta.env.DEV
-        ? 'ws://localhost:8000/terminal/ws'
-        : `${protocol}//${window.location.host}/terminal/ws`;
+        ? 'ws://localhost:8000/api/terminal/ws'
+        : `${protocol}//${window.location.host}/api/terminal/ws`;
 
     const ws = new WebSocket(wsUrl);
     wsInstance.current = ws;
