@@ -1,6 +1,6 @@
 import Editor from '@monaco-editor/react';
 import axios from 'axios';
-import { AlertCircle, Clock, FileCode, Play, Trash2 } from 'lucide-react';
+import { AlertCircle, Clock, Play, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Modal from '../components/Modal';
@@ -182,9 +182,6 @@ export default function Templates() {
             <div key={template.id} className="bg-[#18181b] rounded-xl border border-[#27272a] p-4 flex items-center justify-between group hover:border-[#3f3f46] transition-all hover:bg-[#202023]">
 
               <div className="flex items-center gap-4 flex-1 min-w-0 pointer-events-none">
-                <div className="p-3 bg-blue-500/10 rounded-lg text-blue-400 shrink-0">
-                    <FileCode size={24} />
-                </div>
 
                 <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-3">
