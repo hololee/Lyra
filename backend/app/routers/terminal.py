@@ -1,9 +1,4 @@
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, HTTPException
-import os
-import pty
-import fcntl
-import struct
-import termios
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
 import asyncio
 import logging
 import paramiko
@@ -11,7 +6,6 @@ from ..database import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from ..models import Setting
-from ..schemas import SettingUpdate
 import io
 import json
 from pydantic import BaseModel
@@ -46,11 +40,11 @@ async def test_ssh_connection(req: SshTestRequest):
             key_file = io.StringIO(req.privateKey)
             try:
                 pkey = paramiko.RSAKey.from_private_key(key_file)
-            except:
+            except Exception:
                 try:
                     key_file.seek(0)
                     pkey = paramiko.Ed25519Key.from_private_key(key_file)
-                except:
+                except Exception:
                     key_file.seek(0)
                     pkey = paramiko.PKey.from_private_key(key_file)
             ssh_client.connect(req.host, port=req.port, username=req.username, pkey=pkey, timeout=5)
@@ -80,8 +74,6 @@ async def websocket_terminal(websocket: WebSocket, db: AsyncSession = Depends(ge
     ssh_auth_method = await get_setting_value(db, "ssh_auth_method", "password")
     ssh_password = await get_setting_value(db, "ssh_password")
 
-    # Initial state
-    master_fd = None
     ssh_client = None
     chan = None
 
@@ -94,11 +86,11 @@ async def websocket_terminal(websocket: WebSocket, db: AsyncSession = Depends(ge
             await websocket.close()
             return
 
-        ssh_key = init_data.get("privateKey") # Key comes from client's localStorage
+        ssh_key = init_data.get("privateKey")
         cols = init_data.get("cols", 80)
         rows = init_data.get("rows", 24)
 
-        if ssh_host:
+        if ssh_host and ssh_user:
             try:
                 ssh_client = paramiko.SSHClient()
                 ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -107,11 +99,11 @@ async def websocket_terminal(websocket: WebSocket, db: AsyncSession = Depends(ge
                     key_file = io.StringIO(ssh_key)
                     try:
                         pkey = paramiko.RSAKey.from_private_key(key_file)
-                    except:
+                    except Exception:
                         try:
                             key_file.seek(0)
                             pkey = paramiko.Ed25519Key.from_private_key(key_file)
-                        except:
+                        except Exception:
                             key_file.seek(0)
                             pkey = paramiko.PKey.from_private_key(key_file)
                     ssh_client.connect(ssh_host, port=ssh_port, username=ssh_user, pkey=pkey, timeout=10)
@@ -120,33 +112,16 @@ async def websocket_terminal(websocket: WebSocket, db: AsyncSession = Depends(ge
 
                 chan = ssh_client.invoke_shell(term='xterm-256color', width=cols, height=rows)
                 chan.setblocking(0)
-                await websocket.send_text(f"\x1b[32mConnected to host {ssh_host} via SSH (using local key)\x1b[0m\r\n")
+                await websocket.send_text(f"\x1b[32mConnected to host {ssh_host} via SSH\x1b[0m\r\n")
             except Exception as e:
                 logger.error(f"SSH connection failed: {e}")
                 await websocket.send_text(f"\x1b[31mSSH Connection Failed: {e}\x1b[0m\r\n")
                 await websocket.close()
                 return
         else:
-            # Fallback to local shell
-            await websocket.send_text("\x1b[33mNo host configured. Connected to local backend shell.\x1b[0m\r\n")
-            master_fd, slave_fd = pty.openpty()
-            shell = os.environ.get("SHELL", "/bin/bash")
-            pid = os.fork()
-            if pid == 0:
-                os.setsid()
-                os.dup2(slave_fd, 0)
-                os.dup2(slave_fd, 1)
-                os.dup2(slave_fd, 2)
-                os.close(master_fd)
-                os.close(slave_fd)
-                os.execv(shell, [shell, "-l"])
-            else:
-                os.close(slave_fd)
-                fl = fcntl.fcntl(master_fd, fcntl.F_GETFL)
-                fcntl.fcntl(master_fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
-                # Set initial size for local PTY
-                winsize = struct.pack("HHHH", rows, cols, 0, 0)
-                fcntl.ioctl(master_fd, termios.TIOCSWINSZ, winsize)
+            await websocket.send_text("\x1b[31mError: Host server not configured. Please check terminal settings.\x1b[0m\r\n")
+            await websocket.close()
+            return
 
         async def write_to_backend():
             while True:
@@ -157,14 +132,9 @@ async def websocket_terminal(websocket: WebSocket, db: AsyncSession = Depends(ge
                         r, c = map(int, dims.split(","))
                         if chan:
                             chan.resize_pty(width=c, height=r)
-                        elif master_fd:
-                            winsize = struct.pack("HHHH", r, c, 0, 0)
-                            fcntl.ioctl(master_fd, termios.TIOCSWINSZ, winsize)
                     else:
                         if chan:
                             chan.send(data)
-                        elif master_fd:
-                            os.write(master_fd, data.encode())
                 except (WebSocketDisconnect, Exception):
                     break
 
@@ -177,13 +147,6 @@ async def websocket_terminal(websocket: WebSocket, db: AsyncSession = Depends(ge
                             if not data: break
                             await websocket.send_bytes(data)
                         else:
-                            await asyncio.sleep(0.01)
-                    elif master_fd:
-                        try:
-                            data = os.read(master_fd, 10240)
-                            if not data: break
-                            await websocket.send_bytes(data)
-                        except (OSError, BlockingIOError):
                             await asyncio.sleep(0.01)
 
                     if chan and chan.exit_status_ready():
@@ -204,9 +167,6 @@ async def websocket_terminal(websocket: WebSocket, db: AsyncSession = Depends(ge
     except Exception as e:
         logger.error(f"Terminal error: {e}")
     finally:
-        if master_fd:
-            try: os.close(master_fd)
-            except: pass
         if chan: chan.close()
         if ssh_client: ssh_client.close()
         try: await websocket.close()
