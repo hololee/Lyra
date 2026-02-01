@@ -171,24 +171,27 @@ export default function TerminalPage() {
 
   if (isConfigured === false) {
       return (
-          <div className="h-full flex items-center justify-center bg-[#18181b] p-6">
-              <div className="max-w-md w-full bg-[#27272a] rounded-2xl border border-[#3f3f46] p-8 shadow-2xl">
-                  <div className="flex flex-col items-center text-center space-y-6">
-                      <div className="w-20 h-20 bg-amber-500/10 rounded-full flex items-center justify-center text-amber-500">
-                          <AlertCircle size={48} />
-                      </div>
-                      <div className="space-y-2">
-                        <h2 className="text-2xl font-bold text-white">Setup Required</h2>
-                        <p className="text-gray-400">Host server connection is not configured yet. Please provide SSH details in the settings.</p>
-                      </div>
-                      <Link
-                        to="/settings"
-                        className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2"
-                      >
-                        <SettingsIcon size={20} />
-                        Go to Settings
-                      </Link>
+          <div className="p-8 max-w-7xl mx-auto space-y-8 relative">
+              <header>
+                  <h2 className="text-3xl font-bold text-white tracking-tight">Terminal</h2>
+                  <p className="text-gray-400 mt-1">Direct access to host shell via SSH</p>
+              </header>
+
+              <div className="bg-[#18181b] rounded-xl border border-[#27272a] p-12 text-center text-gray-400 flex flex-col items-center gap-4">
+                  <div className="p-4 bg-[#27272a] rounded-full">
+                      <AlertCircle size={32} className="text-amber-500" />
                   </div>
+                  <div>
+                      <h3 className="text-lg font-semibold text-white mb-1">Setup Required</h3>
+                      <p>Host server connection is not configured yet. Please provide SSH details in the settings.</p>
+                  </div>
+                  <Link
+                      to="/settings"
+                      className="mt-2 px-6 py-2 bg-[#27272a] hover:bg-[#3f3f46] text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                  >
+                      <SettingsIcon size={16} />
+                      Go to Settings
+                  </Link>
               </div>
           </div>
       );
