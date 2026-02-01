@@ -19,7 +19,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const fetchSettings = async () => {
     try {
       setIsLoading(true);
-      const res = await axios.get('/settings/app_name');
+      const res = await axios.get('settings/app_name');
       if (res.data && res.data.value) {
         setAppNameState(res.data.value);
       }
@@ -32,7 +32,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const setAppName = async (newName: string) => {
     try {
-      await axios.put('/settings/app_name', { value: newName });
+      await axios.put('settings/app_name', { value: newName });
       setAppNameState(newName);
     } catch (error) {
       console.error("Failed to update app name", error);

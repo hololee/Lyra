@@ -27,7 +27,13 @@ async def lifespan(app: FastAPI):
     # Shutdown (if needed)
 
 
-app = FastAPI(title="Lyra", version="0.1.0", lifespan=lifespan)
+app = FastAPI(
+    title="Lyra",
+    version="0.1.0",
+    lifespan=lifespan,
+    docs_url="/api/docs",
+    openapi_url="/api/openapi.json"
+)
 
 # CORS
 origins = os.getenv("ALLOW_ORIGINS", "http://localhost:5173").split(",")
@@ -41,12 +47,12 @@ app.add_middleware(
 )
 
 
-@app.get("/")
+@app.get("/api")
 def read_root():
     return {"message": "Welcome to Lyra API"}
 
 
-app.include_router(environments.router)
-app.include_router(terminal.router)
-app.include_router(resources.router)
-app.include_router(settings.router)
+app.include_router(environments.router, prefix="/api")
+app.include_router(terminal.router, prefix="/api")
+app.include_router(resources.router, prefix="/api")
+app.include_router(settings.router, prefix="/api")

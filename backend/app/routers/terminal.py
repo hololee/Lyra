@@ -1,11 +1,15 @@
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-import os
-import pty
-import fcntl
-import struct
-import termios
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
 import asyncio
 import logging
+import paramiko
+from ..database import get_db
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from ..models import Setting
+import io
+import json
+from pydantic import BaseModel
+from typing import Optional
 
 
 router = APIRouter(
@@ -17,135 +21,166 @@ router = APIRouter(
 logger = logging.getLogger("uvicorn")
 
 
+class SshTestRequest(BaseModel):
+    host: str
+    port: int
+    username: str
+    authMethod: str
+    password: Optional[str] = None
+    privateKey: Optional[str] = None
+
+
+@router.post("/test-ssh")
+async def test_ssh_connection(req: SshTestRequest):
+    try:
+        ssh_client = paramiko.SSHClient()
+        ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+        target_host = req.host
+        if target_host in ["localhost", "127.0.0.1"]:
+            target_host = "host.docker.internal"
+
+        if req.authMethod == "key" and req.privateKey:
+            key_file = io.StringIO(req.privateKey)
+            try:
+                pkey = paramiko.RSAKey.from_private_key(key_file)
+            except Exception:
+                try:
+                    key_file.seek(0)
+                    pkey = paramiko.Ed25519Key.from_private_key(key_file)
+                except Exception:
+                    key_file.seek(0)
+                    pkey = paramiko.PKey.from_private_key(key_file)
+            ssh_client.connect(target_host, port=req.port, username=req.username, pkey=pkey, timeout=5)
+        else:
+            ssh_client.connect(target_host, port=req.port, username=req.username, password=req.password, timeout=5)
+
+        ssh_client.close()
+        return {"status": "success", "message": "Successfully connected to host."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+async def get_setting_value(db: AsyncSession, key: str, default: str = "") -> str:
+    result = await db.execute(select(Setting).where(Setting.key == key))
+    setting = result.scalars().first()
+    return setting.value if setting else default
+
+
 @router.websocket("/ws")
-async def websocket_terminal(websocket: WebSocket):
+async def websocket_terminal(websocket: WebSocket, db: AsyncSession = Depends(get_db)):
     await websocket.accept()
 
-    # Create PTY
-    master_fd, slave_fd = pty.openpty()
+    ssh_host = await get_setting_value(db, "ssh_host")
+    ssh_port_str = await get_setting_value(db, "ssh_port", "22")
+    ssh_port = int(ssh_port_str) if ssh_port_str.isdigit() else 22
+    ssh_user = await get_setting_value(db, "ssh_username")
+    ssh_auth_method = await get_setting_value(db, "ssh_auth_method", "password")
+    ssh_password = await get_setting_value(db, "ssh_password")
 
-    # Start shell
-    shell = os.environ.get("SHELL", "/bin/bash")
-    pid = os.fork()
+    ssh_client = None
+    chan = None
 
-    if pid == 0:
-        # Child process
-        os.setsid()
-        os.dup2(slave_fd, 0)
-        os.dup2(slave_fd, 1)
-        os.dup2(slave_fd, 2)
+    try:
+        # Wait for INIT message from client
+        init_raw = await websocket.receive_text()
+        init_data = json.loads(init_raw)
 
-        # Close fds which are not needed
-        os.close(master_fd)
-        os.close(slave_fd)
+        if init_data.get("type") != "INIT":
+            await websocket.close()
+            return
 
-        # Execute shell
-        os.execv(shell, [shell, "-l"])  # Login shell
+        ssh_key = init_data.get("privateKey")
+        cols = init_data.get("cols", 80)
+        rows = init_data.get("rows", 24)
 
-    else:
-        # Parent process (FastAPI)
-        os.close(slave_fd)
+        if ssh_host and ssh_user:
+            target_host = ssh_host
+            if target_host in ["localhost", "127.0.0.1"]:
+                target_host = "host.docker.internal"
 
-        # Non-blocking read
-        fl = fcntl.fcntl(master_fd, fcntl.F_GETFL)
-        fcntl.fcntl(master_fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
+            try:
+                ssh_client = paramiko.SSHClient()
+                ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
-        try:
+                if ssh_auth_method == "key" and ssh_key:
+                    key_file = io.StringIO(ssh_key)
+                    try:
+                        pkey = paramiko.RSAKey.from_private_key(key_file)
+                    except Exception:
+                        try:
+                            key_file.seek(0)
+                            pkey = paramiko.Ed25519Key.from_private_key(key_file)
+                        except Exception:
+                            key_file.seek(0)
+                            pkey = paramiko.PKey.from_private_key(key_file)
+                    ssh_client.connect(target_host, port=ssh_port, username=ssh_user, pkey=pkey, timeout=10)
+                else:
+                    ssh_client.connect(target_host, port=ssh_port, username=ssh_user, password=ssh_password, timeout=10)
+
+                chan = ssh_client.invoke_shell(term='xterm-256color', width=cols, height=rows)
+                chan.setblocking(0)
+                await websocket.send_text(f"\x1b[32mConnected to host {ssh_host} via SSH\x1b[0m\r\n")
+            except Exception as e:
+                logger.error(f"SSH connection failed: {e}")
+                await websocket.send_text(f"\x1b[31mSSH Connection Failed: {e}\x1b[0m\r\n")
+                await websocket.close()
+                return
+        else:
+            await websocket.send_text("\x1b[31mError: Host server not configured. Please check terminal settings.\x1b[0m\r\n")
+            await websocket.close()
+            return
+
+        async def write_to_backend():
             while True:
-                # Select loop to handle both websocket and pty
-                # But since websocket is valid asyncio, we can use asyncio.to_thread or run_in_executor
-                # However, simpler pattern is creating a reader task for PTY
-
-                # We need to multiplex specific events.
-                # 1. WebSocket receive -> Write to master_fd
-                # 2. Master_fd read -> Send to WebSocket
-
-                # Check for PTY output
-                await asyncio.sleep(0.01)  # Simple polling prevents high CPU usage if select not used
-
-                # Attempt to read from PTY
                 try:
-                    output = os.read(master_fd, 10240)
-                    if output:
-                        await websocket.send_text(output.decode("utf-8", errors="ignore"))
-                except BlockingIOError:
-                    pass
-                except OSError:
+                    data = await websocket.receive_text()
+                    if data.startswith("RESIZE:"):
+                        _, dims = data.split(":")
+                        r, c = map(int, dims.split(","))
+                        if chan:
+                            chan.resize_pty(width=c, height=r)
+                    else:
+                        if chan:
+                            chan.send(data)
+                except (WebSocketDisconnect, Exception):
                     break
 
-                # Check for WS input
-                # This is tricky because websocket.receive is awaitable.
-                # We need proper async gathering.
-
-                # Let's refactor to use asyncio.gather or similar
-                # But we can't easily poll websocket.receive without blocking PTY read.
-                # So we spawn a reader/writer task.
-                break  # breaking out to use a better loop structure below
-
-        except Exception as e:
-            logger.error(f"Error initializing terminal loop: {e}")
-
-        # Better async loop
-        try:
-            loop = asyncio.get_running_loop()
-
-            async def write_to_pty():
-                while True:
-                    try:
-                        data = await websocket.receive_text()
-                        # specific command to resize? e.g. "RESIZE:rows,cols"
-                        if data.startswith("RESIZE:"):
-                            _, dims = data.split(":")
-                            rows, cols = map(int, dims.split(","))
-                            # Set window size
-                            winsize = struct.pack("HHHH", rows, cols, 0, 0)
-                            fcntl.ioctl(master_fd, termios.TIOCSWINSZ, winsize)
-                        else:
-                            os.write(master_fd, data.encode())
-                    except WebSocketDisconnect:
-                        break
-                    except Exception:
-                        break
-
-            # Run both tasks
-            # IMPORTANT: read_from_pty needs to be slightly smarter or run concurrently.
-            # Using add_reader is the most efficient way for PTY.
-
-            queue = asyncio.Queue()
-
-            def pty_reader():
+        async def read_from_backend():
+            while True:
                 try:
-                    data = os.read(master_fd, 10240)
-                    if data:
-                        asyncio.run_coroutine_threadsafe(queue.put(data), loop)
-                    else:
-                        # EOF
-                        pass
-                except (OSError, BlockingIOError):
-                    pass
+                    if chan:
+                        if chan.recv_ready():
+                            data = chan.recv(10240)
+                            if not data:
+                                break
+                            await websocket.send_bytes(data)
+                        else:
+                            await asyncio.sleep(0.01)
 
-            loop.add_reader(master_fd, pty_reader)
+                    if chan and chan.exit_status_ready():
+                        break
+                except Exception:
+                    break
 
-            async def consumer():
-                while True:
-                    data = await queue.get()
-                    await websocket.send_bytes(data)  # Send raw bytes/text
+        writer_task = asyncio.create_task(write_to_backend())
+        reader_task = asyncio.create_task(read_from_backend())
 
-            consumer_task = asyncio.create_task(consumer())
-            writer_task = asyncio.create_task(write_to_pty())
+        await asyncio.wait(
+            [writer_task, reader_task],
+            return_when=asyncio.FIRST_COMPLETED
+        )
+        writer_task.cancel()
+        reader_task.cancel()
 
-            await asyncio.wait(
-                [consumer_task, writer_task],
-                return_when=asyncio.FIRST_COMPLETED
-            )
-
-            # Cleanup
-            consumer_task.cancel()
-            writer_task.cancel()
-            loop.remove_reader(master_fd)
-
-        except Exception as e:
-            logger.error(f"Terminal error: {e}")
-
-        finally:
-            os.close(master_fd)
+    except Exception as e:
+        logger.error(f"Terminal error: {e}")
+    finally:
+        if chan:
+            chan.close()
+        if ssh_client:
+            ssh_client.close()
+        try:
+            await websocket.close()
+        except Exception:
+            pass

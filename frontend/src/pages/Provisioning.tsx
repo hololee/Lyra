@@ -42,7 +42,7 @@ export default function Provisioning() {
 
   // Fetch GPU Resources
   useEffect(() => {
-    axios.get('/resources/gpu')
+    axios.get('resources/gpu')
       .then(res => {
          setMaxGpus(res.data.available);
          setTotalGpus(res.data.total);
@@ -97,7 +97,7 @@ export default function Provisioning() {
       };
 
       // Relative path works thanks to Nginx proxy
-      await axios.post('/environments/', payload);
+      await axios.post('environments/', payload);
 
       navigate('/');
     } catch (error) {
