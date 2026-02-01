@@ -55,19 +55,15 @@ export default function Provisioning() {
          const state = location.state as { templateConfig?: any };
          if (state && state.templateConfig) {
              const config = state.templateConfig;
-             setName(config.name || '');
-             if (config.root_password) setPassword(config.root_password);
-             if (config.gpu_count !== undefined) {
-                 // Ensure we don't exceed available GPUs unless mocking
-                 setGpuCount(Math.min(config.gpu_count, res.data.available || 999));
-             } else {
-                 setGpuCount(res.data.available > 0 ? 1 : 0);
-             }
-             if (config.mount_config) setMounts(config.mount_config);
+
+             // Only load Dockerfile content
              if (config.dockerfile_content) setDockerfile(config.dockerfile_content);
 
              // Clear state so refresh doesn't reload template
              window.history.replaceState({}, document.title);
+
+             // Default GPU count fallback
+             setGpuCount(res.data.available > 0 ? 1 : 0);
 
              // Show a toast or notification? (Optional)
          } else {
@@ -134,20 +130,18 @@ export default function Provisioning() {
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
   const [templateName, setTemplateName] = useState('');
   const [templateDesc, setTemplateDesc] = useState('');
+  const [templateErrors, setTemplateErrors] = useState<{name?: string}>({});
 
   const handleSaveTemplate = async () => {
       if (!templateName.trim()) {
-          showAlert("Error", "Template name is required.");
+          setTemplateErrors({ name: "Template name is required." });
           return;
       }
+      setTemplateErrors({});
 
       try {
+          // Only save Dockerfile content as requested
           const config = {
-              name, // Environment Name
-              container_user: 'root',
-              root_password: password,
-              gpu_count: gpuCount, // Store GPU count separately for template logic if needed, or rely on future logic
-              mount_config: mounts,
               dockerfile_content: dockerfile
           };
 
@@ -188,10 +182,21 @@ export default function Provisioning() {
                         <label className="text-sm font-medium text-gray-400">Template Name</label>
                         <input
                             value={templateName}
-                            onChange={(e) => setTemplateName(e.target.value)}
-                            className="w-full bg-[#27272a] border border-[#3f3f46] rounded-lg px-4 py-2 text-white focus:border-blue-500 focus:outline-none"
+                            onChange={(e) => {
+                                setTemplateName(e.target.value);
+                                if (templateErrors.name) setTemplateErrors({});
+                            }}
+                            className={clsx(
+                                "w-full bg-[#27272a] border rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-1 transition-all",
+                                templateErrors.name
+                                    ? "border-red-500/50 focus:border-red-500 focus:ring-red-500/20"
+                                    : "border-[#3f3f46] focus:border-blue-500 focus:ring-blue-500"
+                            )}
                             placeholder="My Template"
                         />
+                         {templateErrors.name && (
+                            <p className="text-xs text-red-400 mt-1">{templateErrors.name}</p>
+                        )}
                     </div>
 
                     <div className="space-y-1">
@@ -206,7 +211,10 @@ export default function Provisioning() {
                 </div>
                 <div className="p-4 border-t border-[#3f3f46] flex justify-end gap-3 bg-[#27272a]/50">
                     <button
-                        onClick={() => setIsSaveModalOpen(false)}
+                        onClick={() => {
+                            setIsSaveModalOpen(false);
+                            setTemplateErrors({});
+                        }}
                         className="px-4 py-2 rounded-lg text-sm font-medium text-gray-400 hover:text-white hover:bg-[#3f3f46] transition-colors"
                     >
                         Cancel
