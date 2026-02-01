@@ -1,7 +1,6 @@
 import axios from 'axios';
 import { RefreshCw, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import Modal from '../components/Modal';
 
 interface Environment {
@@ -65,9 +64,6 @@ export default function Dashboard() {
           <h2 className="text-3xl font-bold text-white">Dashboard</h2>
           <p className="text-gray-400 mt-1">Manage your GPU virtual environments</p>
       </div>
-      <Link to="/provisioning" className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded-lg font-medium transition-colors shadow-lg shadow-blue-600/20">
-          Create Environment
-      </Link>
     </div>
 
 

@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 from uuid import UUID
 from datetime import datetime
@@ -11,7 +11,7 @@ class MountConfig(BaseModel):
 
 
 class EnvironmentBase(BaseModel):
-    name: str
+    name: str = Field(pattern=r"^[a-zA-Z0-9-]+$")
     container_user: str = "root"
     root_password: str = "admin"
     dockerfile_content: Optional[str] = None

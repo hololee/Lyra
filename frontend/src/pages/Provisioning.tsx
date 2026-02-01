@@ -96,7 +96,11 @@ export default function Provisioning() {
 
   const handleSubmit = async () => {
     const newErrors: {name?: string, password?: string} = {};
-    if (!name.trim()) newErrors.name = "Environment name is required.";
+    if (!name.trim()) {
+        newErrors.name = "Environment name is required.";
+    } else if (!/^[a-zA-Z0-9-]+$/.test(name)) {
+        newErrors.name = "Only English letters, numbers, and hyphens(-) are allowed.";
+    }
     if (!password.trim()) newErrors.password = "Root password is required.";
 
     if (Object.keys(newErrors).length > 0) {
