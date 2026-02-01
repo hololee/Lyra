@@ -5,7 +5,7 @@ from .routers import environments, terminal, resources
 import os
 
 
-app = FastAPI(title="GPU-VibeManager", version="0.1.0")
+app = FastAPI(title="Lyra", version="0.1.0")
 
 # CORS
 origins = os.getenv("ALLOW_ORIGINS", "http://localhost:5173").split(",")
@@ -27,7 +27,7 @@ async def startup():
 
 @app.get("/")
 def read_root():
-    return {"message": "Welcome to GPU-VibeManager API"}
+    return {"message": "Welcome to Lyra API"}
 
 
 app.include_router(environments.router)

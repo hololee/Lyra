@@ -17,7 +17,7 @@ export default function Sidebar() {
     <div className="w-64 bg-[#18181b] border-r border-[#27272a] flex flex-col">
       <div className="p-6">
         <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
-          GPU-Vibe
+          Lyra
         </h1>
       </div>
       <nav className="flex-1 px-4 space-y-2">
