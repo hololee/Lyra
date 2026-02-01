@@ -16,6 +16,7 @@ class EnvironmentBase(BaseModel):
     root_password: str = "admin"
     dockerfile_content: Optional[str] = None
     mount_config: List[MountConfig] = []
+    gpu_count: int = 0
 
 
 class EnvironmentCreate(EnvironmentBase):

@@ -65,12 +65,12 @@ export default function Provisioning() {
              window.history.replaceState({}, document.title);
 
              // Default GPU count fallback
-             setGpuCount(res.data.available > 0 ? 1 : 0);
+             setGpuCount(0);
 
              // Show a toast or notification? (Optional)
          } else {
              // Default behavior
-             setGpuCount(res.data.available > 0 ? 1 : 0);
+             setGpuCount(0);
          }
       })
       .catch(err => console.error("Failed to fetch GPU resources", err));
@@ -115,7 +115,8 @@ export default function Provisioning() {
         container_user: 'root',
         root_password: password,
         mount_config: validMounts,
-        dockerfile_content: dockerfile
+        dockerfile_content: dockerfile,
+        gpu_count: gpuCount
       };
 
       // Relative path works thanks to Nginx proxy
