@@ -3,7 +3,7 @@ import axios from 'axios';
 import clsx from 'clsx';
 import { FolderOpen, Play, Plus, Save, Trash2, Upload } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import Modal from '../components/Modal';
 
 interface MountPoint {
@@ -14,6 +14,7 @@ interface MountPoint {
 
 export default function Provisioning() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [name, setName] = useState('');
   const [password, setPassword] = useState('admin');
 
@@ -39,20 +40,43 @@ export default function Provisioning() {
   const [totalGpus, setTotalGpus] = useState(0);
 
   const [mounts, setMounts] = useState<MountPoint[]>([]);
+  const [dockerfile, setDockerfile] = useState('FROM python:3.11-slim\n\n');
 
-  // Fetch GPU Resources
+  // Fetch GPU Resources and Load Template
   useEffect(() => {
+    // 1. Fetch GPU Info
     axios.get('resources/gpu')
       .then(res => {
          setMaxGpus(res.data.available);
          setTotalGpus(res.data.total);
-         // Default to 1 if available, otherwise 0
-         setGpuCount(res.data.available > 0 ? 1 : 0);
+
+         // 2. Load Template if exists
+         // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         const state = location.state as { templateConfig?: any };
+         if (state && state.templateConfig) {
+             const config = state.templateConfig;
+             setName(config.name || '');
+             if (config.root_password) setPassword(config.root_password);
+             if (config.gpu_count !== undefined) {
+                 // Ensure we don't exceed available GPUs unless mocking
+                 setGpuCount(Math.min(config.gpu_count, res.data.available || 999));
+             } else {
+                 setGpuCount(res.data.available > 0 ? 1 : 0);
+             }
+             if (config.mount_config) setMounts(config.mount_config);
+             if (config.dockerfile_content) setDockerfile(config.dockerfile_content);
+
+             // Clear state so refresh doesn't reload template
+             window.history.replaceState({}, document.title);
+
+             // Show a toast or notification? (Optional)
+         } else {
+             // Default behavior
+             setGpuCount(res.data.available > 0 ? 1 : 0);
+         }
       })
       .catch(err => console.error("Failed to fetch GPU resources", err));
-  }, []);
-
-  const [dockerfile, setDockerfile] = useState('FROM python:3.11-slim\n\n');
+  }, [location.state]);
 
   const handleAddMount = () => {
     setMounts([...mounts, { host_path: '', container_path: '', mode: 'rw' }]);
@@ -106,6 +130,43 @@ export default function Provisioning() {
     }
   };
 
+  // Template Save State
+  const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
+  const [templateName, setTemplateName] = useState('');
+  const [templateDesc, setTemplateDesc] = useState('');
+
+  const handleSaveTemplate = async () => {
+      if (!templateName.trim()) {
+          showAlert("Error", "Template name is required.");
+          return;
+      }
+
+      try {
+          const config = {
+              name, // Environment Name
+              container_user: 'root',
+              root_password: password,
+              gpu_count: gpuCount, // Store GPU count separately for template logic if needed, or rely on future logic
+              mount_config: mounts,
+              dockerfile_content: dockerfile
+          };
+
+          await axios.post('templates/', {
+              name: templateName,
+              description: templateDesc,
+              config: config
+          });
+
+          setIsSaveModalOpen(false);
+          setTemplateName('');
+          setTemplateDesc('');
+          showAlert("Success", "Template saved successfully!");
+      } catch (error) {
+          console.error("Failed to save template", error);
+          showAlert("Error", "Failed to save template.");
+      }
+  };
+
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-8 pb-20 relative">
       <Modal
@@ -115,6 +176,52 @@ export default function Provisioning() {
           message={modalConfig.message}
           type={modalConfig.type}
       />
+
+      {/* Save Template Modal */}
+      {isSaveModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+            <div className="bg-[#18181b] rounded-xl border border-[#3f3f46] shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
+                <div className="p-6 space-y-4">
+                    <h3 className="text-xl font-bold text-white">Save as Template</h3>
+
+                    <div className="space-y-1">
+                        <label className="text-sm font-medium text-gray-400">Template Name</label>
+                        <input
+                            value={templateName}
+                            onChange={(e) => setTemplateName(e.target.value)}
+                            className="w-full bg-[#27272a] border border-[#3f3f46] rounded-lg px-4 py-2 text-white focus:border-blue-500 focus:outline-none"
+                            placeholder="My Template"
+                        />
+                    </div>
+
+                    <div className="space-y-1">
+                        <label className="text-sm font-medium text-gray-400">Description</label>
+                        <textarea
+                            value={templateDesc}
+                            onChange={(e) => setTemplateDesc(e.target.value)}
+                            className="w-full bg-[#27272a] border border-[#3f3f46] rounded-lg px-4 py-2 text-white focus:border-blue-500 focus:outline-none resize-none h-24"
+                            placeholder="Optional description..."
+                        />
+                    </div>
+                </div>
+                <div className="p-4 border-t border-[#3f3f46] flex justify-end gap-3 bg-[#27272a]/50">
+                    <button
+                        onClick={() => setIsSaveModalOpen(false)}
+                        className="px-4 py-2 rounded-lg text-sm font-medium text-gray-400 hover:text-white hover:bg-[#3f3f46] transition-colors"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        onClick={handleSaveTemplate}
+                        className="px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-500/20 transition-all"
+                    >
+                        Save Template
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
+
       <header className="flex justify-between items-center">
         <div>
           <h2 className="text-3xl font-bold text-white tracking-tight">New Environment</h2>
@@ -304,7 +411,7 @@ export default function Provisioning() {
                         <span>Load</span>
                     </button>
                     <button
-                        onClick={() => showAlert("Coming Soon", "Template saving functionality will be implemented soon.")}
+                        onClick={() => setIsSaveModalOpen(true)}
                         className="px-3 py-1.5 bg-[#27272a] hover:bg-[#3f3f46] text-gray-300 hover:text-white rounded-md flex items-center gap-2 transition-colors border border-[#3f3f46] text-xs font-medium"
                     >
                         <Save size={14} />
