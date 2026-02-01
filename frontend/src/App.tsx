@@ -9,9 +9,9 @@ import TerminalPage from './pages/TerminalPage';
 function App() {
   return (
     <Router>
-      <div className="flex min-h-screen bg-[#18181b] text-white font-sans">
+      <div className="flex h-screen overflow-hidden bg-[#18181b] text-white font-sans">
         <Sidebar />
-        <main className="flex-1 overflow-auto">
+        <main className="flex-1 overflow-auto overscroll-contain">
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/provisioning" element={<Provisioning />} />

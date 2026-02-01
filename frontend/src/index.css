@@ -10,6 +10,7 @@
     @apply bg-[#18181b] text-white;
     margin: 0;
     padding: 0;
+    overscroll-behavior: none; /* Disable global bounce */
   }
 }
 
