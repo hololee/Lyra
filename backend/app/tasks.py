@@ -4,7 +4,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from .models import Environment
 import docker
-import time
+import tempfile
+import os
 
 
 # Sync database setup for Celery
@@ -30,24 +31,32 @@ def create_environment_task(self, environment_id):
 
         client = docker.from_env()
 
-        # 1. Build Image (Mocking build process or using actual content)
-        # In real app, write dockerfile_content to a temp folder and build
-        # image_tag = f"lyra-env-{str(env.id)}"
+        # 1. Build Image from user-provided Dockerfile
+        image_name = f"lyra-custom-{str(env.id)}"
 
-        # detailed implementation omitted for brevity, simulating build delay
-        time.sleep(5)
+        if env.dockerfile_content:
+            try:
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    dockerfile_path = os.path.join(temp_dir, 'Dockerfile')
+                    with open(dockerfile_path, 'w') as f:
+                        f.write(env.dockerfile_content)
+
+                    # Build image
+                    # Note: This might block for a while
+                    client.images.build(path=temp_dir, tag=image_name, rm=True)
+            except Exception as build_error:
+                env.status = "error"
+                db.commit()
+                return f"Failed to build image: {str(build_error)}"
+        else:
+            # Fallback if no content provided
+            image_name = "python:3.11-slim"
+            try:
+                client.images.get(image_name)
+            except docker.errors.ImageNotFound:
+                client.images.pull(image_name)
 
         # 2. Run Container
-        # For demo purposes, we use python:3.11-slim directly instead of building custom image
-        # This speeds up the process and avoids complex build errors in this environment
-        image_name = "python:3.11-slim"
-
-        # Pull image if not exists
-        try:
-            client.images.get(image_name)
-        except docker.errors.ImageNotFound:
-            client.images.pull(image_name)
-
         # Basic container configuration
         container_config = {
             "image": image_name,
