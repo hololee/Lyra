@@ -129,7 +129,7 @@ export default function Dashboard() {
                 <div className="p-4 border-t border-[#3f3f46] bg-[#27272a]/50 flex justify-end">
                     <button
                         onClick={() => setSelectedVolEnv(null)}
-                        className="px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-500/20 transition-all"
+                        className="px-4 py-2 rounded-lg text-sm font-medium bg-[#3f3f46] hover:bg-[#52525b] text-white transition-all"
                     >
                         Close
                     </button>
