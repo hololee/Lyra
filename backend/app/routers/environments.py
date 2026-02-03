@@ -144,6 +144,27 @@ async def read_environment(environment_id: str, db: AsyncSession = Depends(get_d
     return env
 
 
+@router.get("/{environment_id}/logs")
+async def get_environment_logs(environment_id: str, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Environment).where(Environment.id == environment_id))
+    env = result.scalars().first()
+    if env is None:
+        raise HTTPException(status_code=404, detail="Environment not found")
+
+    client = docker.from_env()
+    container_name = f"lyra-{env.name}-{env.id}"
+
+    try:
+        # Check if container exists (even if stopped/exited)
+        container = client.containers.get(container_name)
+        logs = container.logs(tail=50).decode('utf-8')
+        return {"logs": logs}
+    except docker.errors.NotFound:
+        raise HTTPException(status_code=404, detail="Container not found")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.delete("/{environment_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_environment(environment_id: str, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Environment).where(Environment.id == environment_id))
