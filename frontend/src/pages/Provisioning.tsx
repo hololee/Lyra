@@ -376,7 +376,7 @@ export default function Provisioning() {
             <div className="flex justify-between items-center">
                 <h3 className="text-lg font-semibold text-white flex items-center gap-2">
                 <span className="w-1 h-5 bg-green-500 rounded-full"></span>
-                Storage Mounts
+                Volume Mounts
                 </h3>
                 <button onClick={handleAddMount} className="p-1 hover:bg-[#27272a] rounded text-gray-400 hover:text-white transition-colors">
                     <Plus size={18} />

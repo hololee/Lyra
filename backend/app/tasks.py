@@ -109,6 +109,21 @@ def create_environment_task(self, environment_id):
             # works if capabilities=[["gpu"]]. For simplicity with 'count', we assume generic allocation.
             # If we want specific indices, device_requests are constructed as above.
 
+        # 3. Configure Volumes
+        volumes = {}
+        if env.mount_config:
+            for mount in env.mount_config:
+                # mount is expected to be a dict from JSONB
+                host_path = mount.get('host_path')
+                container_path = mount.get('container_path')
+                mode = mount.get('mode', 'rw')
+
+                if host_path and container_path:
+                    volumes[host_path] = {'bind': container_path, 'mode': mode}
+
+        if volumes:
+            container_config['volumes'] = volumes
+
         client.containers.run(**container_config)
 
         env.status = "running"
