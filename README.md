@@ -5,6 +5,8 @@
 
 Lyra is a web application designed to manage GPU-enabled build environments and containers effortlessly.
 
+![Project Screenshot](imgs/screenshot.png)
+
 ## Quick Start
 
 ### Prerequisites
