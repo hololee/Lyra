@@ -89,7 +89,50 @@ async def create_environment(env: EnvironmentCreate, db: AsyncSession = Depends(
 @router.get("/", response_model=List[EnvironmentResponse])
 async def read_environments(skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Environment).offset(skip).limit(limit))
-    return result.scalars().all()
+    envs = result.scalars().all()
+
+    # Sync with Docker status
+    client = docker.from_env()
+    status_changed = False
+
+    for env in envs:
+        container_name = f"lyra-{env.name}-{env.id}"
+        try:
+            container = client.containers.get(container_name)
+
+            # Check for error state (Exit Code != 0)
+            exit_code = container.attrs['State'].get('ExitCode', 0)
+
+            if container.status == 'running':
+                if env.status != 'running':
+                    env.status = 'running'
+                    status_changed = True
+            else:
+                # Container is not running
+                new_status = 'stopped'
+                if exit_code != 0:
+                    new_status = 'error'
+
+                if env.status != new_status:
+                    env.status = new_status
+                    status_changed = True
+        except docker.errors.NotFound:
+            if env.status in ['running', 'building']:
+                # If it was supposed to be running/building but not found, mark as stopped or error
+                # Note: 'building' might be tricky if it's still in image build phase,
+                # but once container is expected, it should be there.
+                # For simplicity, if not found and was running, mark stopped.
+                if env.status == 'running':
+                    env.status = 'stopped'
+                    status_changed = True
+        except Exception as e:
+            print(f"Error checking container status: {e}")
+
+    if status_changed:
+        await db.commit()
+        # Re-fetch or just return updated objects (SQLAlchemy objects act as refs)
+
+    return envs
 
 
 @router.get("/{environment_id}", response_model=EnvironmentResponse)
@@ -99,6 +142,27 @@ async def read_environment(environment_id: str, db: AsyncSession = Depends(get_d
     if env is None:
         raise HTTPException(status_code=404, detail="Environment not found")
     return env
+
+
+@router.get("/{environment_id}/logs")
+async def get_environment_logs(environment_id: str, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Environment).where(Environment.id == environment_id))
+    env = result.scalars().first()
+    if env is None:
+        raise HTTPException(status_code=404, detail="Environment not found")
+
+    client = docker.from_env()
+    container_name = f"lyra-{env.name}-{env.id}"
+
+    try:
+        # Check if container exists (even if stopped/exited)
+        container = client.containers.get(container_name)
+        logs = container.logs(tail=50).decode('utf-8')
+        return {"logs": logs}
+    except docker.errors.NotFound:
+        raise HTTPException(status_code=404, detail="Container not found")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.delete("/{environment_id}", status_code=status.HTTP_204_NO_CONTENT)

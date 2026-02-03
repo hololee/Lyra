@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { HardDrive, RefreshCw, Trash2, X } from 'lucide-react';
+import { HardDrive, HelpCircle, LayoutTemplate, Network, Play, RefreshCw, Square, SquareTerminal, Trash2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import Modal from '../components/Modal';
 
@@ -25,6 +25,9 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [selectedVolEnv, setSelectedVolEnv] = useState<Environment | null>(null);
+  const [errorLogEnv, setErrorLogEnv] = useState<Environment | null>(null);
+  const [errorLog, setErrorLog] = useState<string>("");
+  const [logLoading, setLogLoading] = useState(false);
 
   const fetchEnvironments = async () => {
     try {
@@ -37,6 +40,27 @@ export default function Dashboard() {
       setLoading(false);
     }
   };
+
+  const fetchErrorLogs = async (envId: string) => {
+    try {
+        setLogLoading(true);
+        const res = await axios.get(`environments/${envId}/logs`);
+        setErrorLog(res.data.logs);
+    } catch (error) {
+        console.error("Failed to fetch logs", error);
+        setErrorLog("Failed to fetch logs.");
+    } finally {
+        setLogLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (errorLogEnv) {
+        fetchErrorLogs(errorLogEnv.id);
+    } else {
+        setErrorLog("");
+    }
+  }, [errorLogEnv]);
 
   const deleteEnvironment = async () => {
     if (!deleteId) return;
@@ -105,7 +129,48 @@ export default function Dashboard() {
                 <div className="p-4 border-t border-[#3f3f46] bg-[#27272a]/50 flex justify-end">
                     <button
                         onClick={() => setSelectedVolEnv(null)}
-                        className="px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-500/20 transition-all"
+                        className="px-4 py-2 rounded-lg text-sm font-medium bg-[#3f3f46] hover:bg-[#52525b] text-white transition-all"
+                    >
+                        Close
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
+
+      {/* Error Log Modal */}
+      {errorLogEnv && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+            <div className="bg-[#18181b] rounded-xl border border-[#3f3f46] shadow-2xl w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+                <div className="p-6 border-b border-[#3f3f46] flex justify-between items-center">
+                    <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                        <HelpCircle size={20} className="text-red-400" />
+                        Container Error Log
+                    </h3>
+                    <button onClick={() => setErrorLogEnv(null)} className="text-gray-400 hover:text-white transition-colors">
+                        <X size={20} />
+                    </button>
+                </div>
+                <div className="p-6">
+                    <p className="text-gray-400 text-sm mb-4">
+                        Last 50 lines of logs for <span className="text-white font-medium">{errorLogEnv.name}</span>
+                    </p>
+                    <div className="bg-[#0f0f12] rounded-lg border border-[#3f3f46] p-4 max-h-[400px] overflow-y-auto">
+                        {logLoading ? (
+                            <div className="flex items-center justify-center py-8 text-gray-500">
+                                <RefreshCw size={24} className="animate-spin" />
+                            </div>
+                        ) : (
+                            <pre className="text-xs font-mono text-gray-300 whitespace-pre-wrap font-ligatures-none">
+                                {errorLog || "No logs available."}
+                            </pre>
+                        )}
+                    </div>
+                </div>
+                <div className="p-4 border-t border-[#3f3f46] bg-[#27272a]/50 flex justify-end">
+                    <button
+                        onClick={() => setErrorLogEnv(null)}
+                        className="px-4 py-2 rounded-lg text-sm font-medium bg-[#3f3f46] hover:bg-[#52525b] text-white transition-all"
                     >
                         Close
                     </button>
@@ -150,21 +215,68 @@ export default function Dashboard() {
                             <tr key={env.id} className="hover:bg-[#3f3f46]/50 transition-colors">
                                 <td className="px-6 py-4 text-white font-medium">{env.name}</td>
                                 <td className="px-6 py-4">
-                                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                        env.status === 'running' ? 'bg-green-500/10 text-green-500' :
-                                        env.status === 'building' ? 'bg-yellow-500/10 text-yellow-500' :
-                                        'bg-red-500/10 text-red-500'
-                                    }`}>
-                                        {env.status.charAt(0).toUpperCase() + env.status.slice(1)}
-                                    </span>
+                                    <div className="flex items-center gap-2">
+                                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                            env.status === 'running' ? 'bg-green-500/10 text-green-500' :
+                                            env.status === 'stopped' ? 'bg-yellow-500/10 text-yellow-500' :
+                                            env.status === 'building' ? 'bg-blue-500/10 text-blue-500' :
+                                            'bg-red-500/10 text-red-500'
+                                        }`}>
+                                            {env.status.charAt(0).toUpperCase() + env.status.slice(1)}
+                                        </span>
+                                        {env.status === 'error' && (
+                                            <button
+                                                onClick={() => setErrorLogEnv(env)}
+                                                className="text-red-400 hover:text-red-300 transition-colors"
+                                                title="View Error Logs"
+                                            >
+                                                <HelpCircle size={16} />
+                                            </button>
+                                        )}
+                                    </div>
                                 </td>
                                 <td className="px-6 py-4 text-gray-300">
-                                    {env.ssh_port} / {env.jupyter_port}
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex items-center gap-1.5" title="SSH Port">
+                                            <span>{env.ssh_port}</span>
+                                            <button
+                                                className="p-1 hover:bg-[#3f3f46] rounded text-gray-500 hover:text-blue-400 transition-colors"
+                                                title="Connect via SSH (Coming Soon)"
+                                            >
+                                                <SquareTerminal size={14} />
+                                            </button>
+                                        </div>
+                                        <span className="text-gray-600">/</span>
+                                        <div className="flex items-center gap-1.5" title="Jupyter Port">
+                                            <span>{env.jupyter_port}</span>
+                                            <button
+                                                className="p-1 hover:bg-[#3f3f46] rounded text-gray-500 hover:text-orange-400 transition-colors"
+                                                title="Open Jupyter Lab (Coming Soon)"
+                                            >
+                                                <LayoutTemplate size={14} />
+                                            </button>
+                                        </div>
+                                    </div>
                                 </td>
                                 <td className="px-6 py-4 text-gray-300">
                                     {env.gpu_indices.length > 0 ? env.gpu_indices.join(', ') : "-"}
                                 </td>
                                 <td className="px-6 py-4 text-right space-x-2">
+                                    <button
+                                        onClick={() => {
+                                            // Toggle status locally for UI demo
+                                            const newStatus = env.status === 'running' ? 'stopped' : 'running';
+                                            setEnvironments(prev => prev.map(e => e.id === env.id ? { ...e, status: newStatus } : e));
+                                        }}
+                                        className={`p-2 rounded-lg transition-colors ${
+                                            env.status === 'running'
+                                            ? "hover:bg-[#3f3f46] text-gray-400 hover:text-yellow-400"
+                                            : "hover:bg-[#3f3f46] text-gray-400 hover:text-green-400"
+                                        }`}
+                                        title={env.status === 'running' ? "Stop Instance" : "Start Instance"}
+                                    >
+                                        {env.status === 'running' ? <Square size={18} fill="currentColor" className="opacity-80" /> : <Play size={18} fill="currentColor" />}
+                                    </button>
                                     <button
                                         onClick={() => {
                                             if (env.mount_config && env.mount_config.length > 0) {
@@ -180,6 +292,12 @@ export default function Dashboard() {
                                         title={env.mount_config && env.mount_config.length > 0 ? "View Volumes" : "No Volumes"}
                                     >
                                         <HardDrive size={18} />
+                                    </button>
+                                    <button
+                                        className="p-2 hover:bg-[#3f3f46] rounded-lg text-gray-400 hover:text-purple-400 transition-colors"
+                                        title="Manage Ports (Coming Soon)"
+                                    >
+                                        <Network size={18} />
                                     </button>
                                     <button
                                         onClick={() => setDeleteId(env.id)}
