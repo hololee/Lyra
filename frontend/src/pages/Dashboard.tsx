@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { HardDrive, RefreshCw, Trash2, X } from 'lucide-react';
+import { HardDrive, LayoutTemplate, RefreshCw, SquareTerminal, Trash2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import Modal from '../components/Modal';
 
@@ -159,7 +159,27 @@ export default function Dashboard() {
                                     </span>
                                 </td>
                                 <td className="px-6 py-4 text-gray-300">
-                                    {env.ssh_port} / {env.jupyter_port}
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex items-center gap-1.5" title="SSH Port">
+                                            <span>{env.ssh_port}</span>
+                                            <button
+                                                className="p-1 hover:bg-[#3f3f46] rounded text-gray-500 hover:text-blue-400 transition-colors"
+                                                title="Connect via SSH (Coming Soon)"
+                                            >
+                                                <SquareTerminal size={14} />
+                                            </button>
+                                        </div>
+                                        <span className="text-gray-600">/</span>
+                                        <div className="flex items-center gap-1.5" title="Jupyter Port">
+                                            <span>{env.jupyter_port}</span>
+                                            <button
+                                                className="p-1 hover:bg-[#3f3f46] rounded text-gray-500 hover:text-orange-400 transition-colors"
+                                                title="Open Jupyter Lab (Coming Soon)"
+                                            >
+                                                <LayoutTemplate size={14} />
+                                            </button>
+                                        </div>
+                                    </div>
                                 </td>
                                 <td className="px-6 py-4 text-gray-300">
                                     {env.gpu_indices.length > 0 ? env.gpu_indices.join(', ') : "-"}
