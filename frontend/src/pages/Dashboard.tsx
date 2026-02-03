@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { HardDrive, LayoutTemplate, Network, RefreshCw, SquareTerminal, Trash2, X } from 'lucide-react';
+import { HardDrive, LayoutTemplate, Network, Play, RefreshCw, Square, SquareTerminal, Trash2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import Modal from '../components/Modal';
 
@@ -185,6 +185,21 @@ export default function Dashboard() {
                                     {env.gpu_indices.length > 0 ? env.gpu_indices.join(', ') : "-"}
                                 </td>
                                 <td className="px-6 py-4 text-right space-x-2">
+                                    <button
+                                        onClick={() => {
+                                            // Toggle status locally for UI demo
+                                            const newStatus = env.status === 'running' ? 'stopped' : 'running';
+                                            setEnvironments(prev => prev.map(e => e.id === env.id ? { ...e, status: newStatus } : e));
+                                        }}
+                                        className={`p-2 rounded-lg transition-colors ${
+                                            env.status === 'running'
+                                            ? "hover:bg-[#3f3f46] text-gray-400 hover:text-yellow-400"
+                                            : "hover:bg-[#3f3f46] text-gray-400 hover:text-green-400"
+                                        }`}
+                                        title={env.status === 'running' ? "Stop Instance" : "Start Instance"}
+                                    >
+                                        {env.status === 'running' ? <Square size={18} fill="currentColor" className="opacity-80" /> : <Play size={18} fill="currentColor" />}
+                                    </button>
                                     <button
                                         onClick={() => {
                                             if (env.mount_config && env.mount_config.length > 0) {
