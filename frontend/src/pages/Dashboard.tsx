@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { HardDrive, LayoutTemplate, RefreshCw, SquareTerminal, Trash2, X } from 'lucide-react';
+import { HardDrive, LayoutTemplate, Network, RefreshCw, SquareTerminal, Trash2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import Modal from '../components/Modal';
 
@@ -200,6 +200,12 @@ export default function Dashboard() {
                                         title={env.mount_config && env.mount_config.length > 0 ? "View Volumes" : "No Volumes"}
                                     >
                                         <HardDrive size={18} />
+                                    </button>
+                                    <button
+                                        className="p-2 hover:bg-[#3f3f46] rounded-lg text-gray-400 hover:text-purple-400 transition-colors"
+                                        title="Manage Ports (Coming Soon)"
+                                    >
+                                        <Network size={18} />
                                     </button>
                                     <button
                                         onClick={() => setDeleteId(env.id)}
