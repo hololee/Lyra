@@ -152,7 +152,8 @@ export default function Dashboard() {
                                 <td className="px-6 py-4">
                                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                                         env.status === 'running' ? 'bg-green-500/10 text-green-500' :
-                                        env.status === 'building' ? 'bg-yellow-500/10 text-yellow-500' :
+                                        env.status === 'stopped' ? 'bg-yellow-500/10 text-yellow-500' :
+                                        env.status === 'building' ? 'bg-blue-500/10 text-blue-500' :
                                         'bg-red-500/10 text-red-500'
                                     }`}>
                                         {env.status.charAt(0).toUpperCase() + env.status.slice(1)}
