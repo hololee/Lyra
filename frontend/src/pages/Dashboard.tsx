@@ -62,6 +62,11 @@ export default function Dashboard() {
   const [errorLog, setErrorLog] = useState<string>("");
   const [logLoading, setLogLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
+  const getStatusLabel = (status: string) => {
+    const key = `status.${status}`;
+    const translated = t(key);
+    return translated === key ? t('status.unknown') : translated;
+  };
 
   const fetchEnvironments = async (options: { showLoading?: boolean } = {}) => {
     const { showLoading = false } = options;
@@ -148,9 +153,9 @@ export default function Dashboard() {
   const copySshCommand = async (sshCommand: string) => {
     try {
       await navigator.clipboard.writeText(sshCommand);
-      showToast('SSH command copied to clipboard.', 'success');
+      showToast(t('dashboard.sshCopied'), 'success');
     } catch {
-      showToast(`Unable to copy. Run manually: ${sshCommand}`, 'error');
+      showToast(t('dashboard.copyFailedRunManually', { command: sshCommand }), 'error');
     }
   };
 
@@ -166,13 +171,13 @@ export default function Dashboard() {
       const res = await axios.post(`environments/${env.id}/jupyter/launch`);
       const launchUrl = String(res.data.launch_url || '');
       if (!launchUrl) {
-        showToast('Unable to open Jupyter: launch URL was not returned.', 'error');
+        showToast(t('dashboard.jupyterLaunchUrlMissing'), 'error');
         return;
       }
       const targetUrl = launchUrl.startsWith('http') ? launchUrl : `${window.location.origin}${launchUrl}`;
       window.open(targetUrl, '_blank', 'noopener,noreferrer');
     } catch {
-      showToast('Unable to open Jupyter. Please ensure the environment is running.', 'error');
+      showToast(t('dashboard.jupyterOpenFailed'), 'error');
     }
   };
 
@@ -221,11 +226,11 @@ export default function Dashboard() {
                         {selectedVolEnv.mount_config.map((mount, idx) => (
                             <div key={idx} className="bg-[#27272a] p-3 rounded-lg border border-[#3f3f46] text-sm">
                                 <div className="flex items-center gap-2 mb-1">
-                                    <span className="text-xs font-bold text-blue-400 uppercase w-10 shrink-0">Host</span>
+                                    <span className="text-xs font-bold text-blue-400 uppercase w-10 shrink-0">{t('dashboard.hostLabel')}</span>
                                     <span className="text-gray-300 font-mono overflow-x-auto whitespace-nowrap flex-1 scrollbar-hide">{mount.host_path}</span>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    <span className="text-xs font-bold text-green-400 uppercase w-10 shrink-0">Dest</span>
+                                    <span className="text-xs font-bold text-green-400 uppercase w-10 shrink-0">{t('dashboard.destinationLabel')}</span>
                                     <span className="text-gray-300 font-mono overflow-x-auto whitespace-nowrap flex-1 scrollbar-hide">{mount.container_path}</span>
                                     <span className="ml-auto text-[10px] bg-[#3f3f46] px-1.5 py-0.5 rounded text-gray-400 uppercase">
                                         {mount.mode}
@@ -266,10 +271,10 @@ export default function Dashboard() {
                         {selectedPortEnv.custom_ports.map((mapping, idx) => (
                             <div key={`${mapping.host_port}-${mapping.container_port}-${idx}`} className="bg-[#27272a] p-3 rounded-lg border border-[#3f3f46] text-sm">
                                 <div className="flex items-center gap-2">
-                                    <span className="text-xs font-bold text-cyan-400 uppercase w-14 shrink-0">Host</span>
+                                    <span className="text-xs font-bold text-cyan-400 uppercase w-14 shrink-0">{t('dashboard.hostLabel')}</span>
                                     <span className="text-gray-300 font-mono">{mapping.host_port}</span>
                                     <span className="text-gray-600 px-2">:</span>
-                                    <span className="text-xs font-bold text-green-400 uppercase w-10 shrink-0">Port</span>
+                                    <span className="text-xs font-bold text-green-400 uppercase w-10 shrink-0">{t('dashboard.portLabel')}</span>
                                     <span className="text-gray-300 font-mono">{mapping.container_port}</span>
                                 </div>
                             </div>
@@ -388,7 +393,7 @@ export default function Dashboard() {
                                         }`}>
                                             {actionLoading[env.id]
                                               ? (env.status === 'running' ? t('status.stopping') : t('status.starting'))
-                                              : (env.status.charAt(0).toUpperCase() + env.status.slice(1))}
+                                              : getStatusLabel(env.status)}
                                         </span>
                                         {env.status === 'error' && (
                                             <button
