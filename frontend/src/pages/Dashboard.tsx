@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { HardDrive, HelpCircle, LayoutTemplate, Network, Play, RefreshCw, Square, SquareTerminal, Trash2, X } from 'lucide-react';
+import { Code2, HardDrive, HelpCircle, LayoutTemplate, Play, RefreshCw, Square, SquareTerminal, Trash2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import Modal from '../components/Modal';
 import { useToast } from '../context/ToastContext';
@@ -19,6 +19,7 @@ interface Environment {
   container_id?: string;
   ssh_port: number;
   jupyter_port: number;
+  code_port: number;
   created_at: string;
   mount_config: MountConfig[];
 }
@@ -166,6 +167,16 @@ export default function Dashboard() {
     }
   };
 
+  const openCodeServer = (env: Environment) => {
+    const protocol = window.location.protocol;
+    const host = window.location.hostname;
+    const url = `${protocol}//${host}:${env.code_port}`;
+    const win = window.open(url, '_blank', 'noopener,noreferrer');
+    if (!win) {
+      showToast('Unable to open code-server window.', 'error');
+    }
+  };
+
   useEffect(() => {
     fetchEnvironments({ showLoading: true });
     const interval = setInterval(() => {
@@ -302,7 +313,7 @@ export default function Dashboard() {
                         <tr>
                             <th className="px-6 py-4 font-medium">Name</th>
                             <th className="px-6 py-4 font-medium">Status</th>
-                            <th className="px-6 py-4 font-medium">Ports (SSH/Jupyter)</th>
+                            <th className="px-6 py-4 font-medium">Ports (SSH/Jupyter/Code)</th>
                             <th className="px-6 py-4 font-medium">GPU</th>
                             <th className="px-6 py-4 font-medium text-right">Actions</th>
                         </tr>
@@ -374,6 +385,17 @@ export default function Dashboard() {
                                                     <LayoutTemplate size={14} />
                                                 </button>
                                             </div>
+                                            <span className="text-gray-600">/</span>
+                                            <div className="flex items-center gap-1.5" title="Code-server Port">
+                                                <span>{env.code_port}</span>
+                                                <button
+                                                    onClick={() => openCodeServer(env)}
+                                                    className="p-1 hover:bg-[#3f3f46] rounded text-gray-500 hover:text-cyan-400 transition-colors"
+                                                    title="Open code-server"
+                                                >
+                                                    <Code2 size={14} />
+                                                </button>
+                                            </div>
                                         </div>
                                     )}
                                 </td>
@@ -425,12 +447,6 @@ export default function Dashboard() {
                                         title={env.mount_config && env.mount_config.length > 0 ? "View Volumes" : "No Volumes"}
                                     >
                                         <HardDrive size={18} />
-                                    </button>
-                                    <button
-                                        className="p-2 hover:bg-[#3f3f46] rounded-lg text-gray-400 hover:text-purple-400 transition-colors"
-                                        title="Manage Ports (Coming Soon)"
-                                    >
-                                        <Network size={18} />
                                     </button>
                                     <button
                                         onClick={() => setDeleteId(env.id)}
