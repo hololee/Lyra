@@ -8,7 +8,6 @@ import tempfile
 import os
 import secrets
 import random
-import socket
 
 
 # Sync database setup for Celery
@@ -20,24 +19,33 @@ SessionLocal = sessionmaker(bind=engine)
 CONTAINER_RUN_PORT_RETRIES = 3
 
 
-def _is_port_free_on_host(port: int) -> bool:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        try:
-            s.bind(("0.0.0.0", port))
-            return True
-        except OSError:
-            return False
+def _get_docker_used_ports() -> set[int]:
+    used_ports: set[int] = set()
+    try:
+        client = docker.from_env()
+        containers = client.containers.list(all=True)
+        for container in containers:
+            ports = container.attrs.get("NetworkSettings", {}).get("Ports", {}) or {}
+            for bindings in ports.values():
+                if not bindings:
+                    continue
+                for binding in bindings:
+                    host_port = binding.get("HostPort")
+                    if host_port and str(host_port).isdigit():
+                        used_ports.add(int(host_port))
+    except Exception:
+        # If Docker inspection fails, run() retry logic will still handle conflicts.
+        pass
+    return used_ports
 
 
-def _pick_free_port(start: int, end: int, used_ports: set[int]) -> int:
+def _pick_free_port(start: int, end: int, blocked_ports: set[int]) -> int:
     candidates = list(range(start, end + 1))
     random.shuffle(candidates)
     for port in candidates:
-        if port in used_ports:
+        if port in blocked_ports:
             continue
-        if _is_port_free_on_host(port):
-            return port
+        return port
     raise RuntimeError(f"No available host ports in range {start}-{end}")
 
 
@@ -47,17 +55,19 @@ def _allocate_ports(db, exclude_environment_id=None):
         query = query.filter(Environment.id != exclude_environment_id)
     rows = query.all()
 
-    used_ports = set()
+    blocked_ports = set()
     for ssh_port, jupyter_port, code_port in rows:
-        used_ports.add(ssh_port)
-        used_ports.add(jupyter_port)
-        used_ports.add(code_port)
+        blocked_ports.add(ssh_port)
+        blocked_ports.add(jupyter_port)
+        blocked_ports.add(code_port)
 
-    ssh_port = _pick_free_port(20000, 25000, used_ports)
-    used_ports.add(ssh_port)
-    jupyter_port = _pick_free_port(25001, 30000, used_ports)
-    used_ports.add(jupyter_port)
-    code_port = _pick_free_port(30001, 35000, used_ports)
+    blocked_ports.update(_get_docker_used_ports())
+
+    ssh_port = _pick_free_port(20000, 25000, blocked_ports)
+    blocked_ports.add(ssh_port)
+    jupyter_port = _pick_free_port(25001, 30000, blocked_ports)
+    blocked_ports.add(jupyter_port)
+    code_port = _pick_free_port(30001, 35000, blocked_ports)
     return ssh_port, jupyter_port, code_port
 
 
