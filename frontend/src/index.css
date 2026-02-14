@@ -10,6 +10,7 @@
     --bg: #f5f5f7;
     --bg-elevated: #ffffff;
     --surface: #ffffff;
+    --overlay: rgb(15 23 42 / 0.38);
     --border: #d4d4d8;
     --text: #18181b;
     --text-muted: #52525b;
@@ -23,6 +24,7 @@
     --bg: #18181b;
     --bg-elevated: #27272a;
     --surface: #27272a;
+    --overlay: rgb(0 0 0 / 0.58);
     --border: #3f3f46;
     --text: #ffffff;
     --text-muted: #a1a1aa;

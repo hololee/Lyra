@@ -34,18 +34,18 @@ export default function Sidebar() {
               className={clsx(
                 "flex items-center px-4 py-3 rounded-lg transition-all duration-200 group",
                 isActive
-                  ? "bg-blue-600/10 text-blue-400"
-                  : "text-gray-400 hover:bg-[#27272a] hover:text-white"
+                  ? "bg-[color-mix(in_oklab,var(--primary)_14%,transparent)] text-[var(--primary)]"
+                  : "text-[var(--text-muted)] hover:bg-[var(--bg)] hover:text-[var(--text)]"
               )}
             >
-              <item.icon size={20} className={clsx("mr-3", isActive ? "text-blue-400" : "group-hover:text-white")} />
+              <item.icon size={20} className={clsx("mr-3", isActive ? "text-[var(--primary)]" : "text-[var(--text-muted)] group-hover:text-[var(--text)]")} />
               <span className="font-medium">{t(item.nameKey)}</span>
             </Link>
           );
         })}
       </nav>
       <div className="p-4 border-t border-[var(--border)]">
-        <div className="flex items-center gap-3 text-sm text-gray-500">
+        <div className="flex items-center gap-3 text-sm text-[var(--text-muted)]">
            <div className="w-2 h-2 rounded-full bg-green-500"></div>
            {t('system.status')}: {t('system.online')}
         </div>

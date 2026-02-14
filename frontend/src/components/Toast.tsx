@@ -20,30 +20,35 @@ export default function Toast({ id, message, type, onClose }: ToastProps) {
     return () => clearTimeout(timer);
   }, [id, onClose]);
 
+  const accent = type === 'success'
+    ? 'var(--success)'
+    : type === 'error'
+      ? 'var(--danger)'
+      : 'var(--primary)';
+
   return (
     <div
       className={clsx(
-        "w-full max-w-md flex items-start gap-3 px-4 py-3 rounded-lg shadow-lg border backdrop-blur-md transition-all animate-in slide-in-from-right-full duration-300 bg-[#18181b]/95",
-        type === 'success' && "border-l-4 border-l-green-500 border-green-500/20 text-green-200",
-        type === 'error' && "border-l-4 border-l-red-500 border-red-500/20 text-red-200",
-        type === 'info' && "border-l-4 border-l-blue-500 border-blue-500/20 text-blue-200"
+        "w-full max-w-md flex items-start gap-3 px-4 py-3 rounded-lg shadow-lg border border-l-4 backdrop-blur-md transition-all animate-in slide-in-from-right-full duration-300"
       )}
+      style={{
+        backgroundColor: 'color-mix(in oklab, var(--bg-elevated) 94%, transparent)',
+        borderColor: `color-mix(in oklab, ${accent} 34%, var(--border))`,
+        borderLeftColor: accent,
+        color: `color-mix(in oklab, ${accent} 74%, var(--text))`,
+      }}
       role="alert"
     >
       <div className="shrink-0">
-        {type === 'success' && <CheckCircle size={18} className="text-green-500" />}
-        {type === 'error' && <XCircle size={18} className="text-red-500" />}
-        {type === 'info' && <Info size={18} className="text-blue-500" />}
+        {type === 'success' && <CheckCircle size={18} style={{ color: accent }} />}
+        {type === 'error' && <XCircle size={18} style={{ color: accent }} />}
+        {type === 'info' && <Info size={18} style={{ color: accent }} />}
       </div>
       <p className="text-sm font-medium leading-5 break-words">{message}</p>
       <button
         onClick={() => onClose(id)}
-        className={clsx(
-          "ml-2 p-1 rounded-md transition-colors hover:bg-white/10",
-          type === 'success' && "text-green-400 hover:text-green-100",
-          type === 'error' && "text-red-400 hover:text-red-100",
-          type === 'info' && "text-blue-400 hover:text-blue-100"
-        )}
+        className="ml-2 rounded-md p-1 transition-colors hover:bg-[color-mix(in_oklab,var(--bg)_70%,transparent)]"
+        style={{ color: accent }}
       >
         <X size={14} />
       </button>
