@@ -14,9 +14,9 @@ function App() {
     <AppProvider>
       <ToastProvider>
       <Router>
-      <div className="flex h-screen overflow-hidden bg-[#18181b] text-white font-sans">
+      <div className="flex h-screen overflow-hidden font-sans bg-[var(--bg)] text-[var(--text)]">
         <Sidebar />
-        <main className="flex-1 overflow-auto overscroll-contain">
+        <main className="flex-1 overflow-auto overscroll-contain bg-[var(--surface)]">
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/provisioning" element={<Provisioning />} />

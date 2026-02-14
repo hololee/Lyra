@@ -18,7 +18,7 @@ export default function Sidebar() {
   const { t } = useTranslation();
 
   return (
-    <div className="w-64 bg-[#18181b] border-r border-[#27272a] flex flex-col">
+    <div className="w-64 bg-[var(--bg-elevated)] border-r border-[var(--border)] flex flex-col">
       <div className="p-6">
         <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
           {appName}
@@ -44,7 +44,7 @@ export default function Sidebar() {
           );
         })}
       </nav>
-      <div className="p-4 border-t border-[#27272a]">
+      <div className="p-4 border-t border-[var(--border)]">
         <div className="flex items-center gap-3 text-sm text-gray-500">
            <div className="w-2 h-2 rounded-full bg-green-500"></div>
            {t('system.status')}: {t('system.online')}
