@@ -7,6 +7,8 @@ import docker
 import tempfile
 import os
 import secrets
+import random
+import socket
 
 
 # Sync database setup for Celery
@@ -15,6 +17,48 @@ import secrets
 SYNC_DATABASE_URL = DATABASE_URL.replace("postgresql+asyncpg", "postgresql")
 engine = create_engine(SYNC_DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine)
+CONTAINER_RUN_PORT_RETRIES = 3
+
+
+def _is_port_free_on_host(port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            s.bind(("0.0.0.0", port))
+            return True
+        except OSError:
+            return False
+
+
+def _pick_free_port(start: int, end: int, used_ports: set[int]) -> int:
+    candidates = list(range(start, end + 1))
+    random.shuffle(candidates)
+    for port in candidates:
+        if port in used_ports:
+            continue
+        if _is_port_free_on_host(port):
+            return port
+    raise RuntimeError(f"No available host ports in range {start}-{end}")
+
+
+def _allocate_ports(db, exclude_environment_id=None):
+    query = db.query(Environment.ssh_port, Environment.jupyter_port, Environment.code_port)
+    if exclude_environment_id is not None:
+        query = query.filter(Environment.id != exclude_environment_id)
+    rows = query.all()
+
+    used_ports = set()
+    for ssh_port, jupyter_port, code_port in rows:
+        used_ports.add(ssh_port)
+        used_ports.add(jupyter_port)
+        used_ports.add(code_port)
+
+    ssh_port = _pick_free_port(20000, 25000, used_ports)
+    used_ports.add(ssh_port)
+    jupyter_port = _pick_free_port(25001, 30000, used_ports)
+    used_ports.add(jupyter_port)
+    code_port = _pick_free_port(30001, 35000, used_ports)
+    return ssh_port, jupyter_port, code_port
 
 
 @celery_app.task(bind=True)
@@ -138,7 +182,25 @@ def create_environment_task(self, environment_id):
         if volumes:
             container_config['volumes'] = volumes
 
-        client.containers.run(**container_config)
+        for attempt in range(CONTAINER_RUN_PORT_RETRIES):
+            container_config["ports"] = {
+                '22/tcp': env.ssh_port,
+                '8888/tcp': env.jupyter_port,
+                '8080/tcp': env.code_port
+            }
+            try:
+                client.containers.run(**container_config)
+                break
+            except docker.errors.APIError as run_error:
+                message = str(run_error).lower()
+                is_port_conflict = "port is already allocated" in message or "address already in use" in message
+                if not is_port_conflict or attempt == CONTAINER_RUN_PORT_RETRIES - 1:
+                    raise
+                new_ssh_port, new_jupyter_port, new_code_port = _allocate_ports(db, exclude_environment_id=env.id)
+                env.ssh_port = new_ssh_port
+                env.jupyter_port = new_jupyter_port
+                env.code_port = new_code_port
+                db.commit()
 
         env.status = "running"
         db.commit()

@@ -10,6 +10,9 @@ from ..tasks import create_environment_task
 import docker
 import secrets
 import time
+import random
+import socket
+from sqlalchemy.exc import IntegrityError
 
 router = APIRouter(
     prefix="/environments",
@@ -18,6 +21,7 @@ router = APIRouter(
 
 JUPYTER_LAUNCH_TTL_SECONDS = 60
 jupyter_launch_tickets: dict[str, dict[str, str | float | bool]] = {}
+MAX_PORT_ALLOCATION_RETRIES = 8
 
 
 def _cleanup_expired_jupyter_tickets():
@@ -38,14 +42,52 @@ async def _get_jupyter_token(db: AsyncSession, environment_id: str) -> str | Non
     return token_setting.value if token_setting else None
 
 
+def _is_port_free_on_host(port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            s.bind(("0.0.0.0", port))
+            return True
+        except OSError:
+            return False
+
+
+def _pick_free_port(start: int, end: int, used_ports: set[int]) -> int:
+    candidates = list(range(start, end + 1))
+    random.shuffle(candidates)
+    for port in candidates:
+        if port in used_ports:
+            continue
+        if _is_port_free_on_host(port):
+            return port
+    raise HTTPException(
+        status_code=503,
+        detail=f"No available host ports in range {start}-{end}",
+    )
+
+
+async def _allocate_ports(db: AsyncSession) -> tuple[int, int, int]:
+    result = await db.execute(select(Environment.ssh_port, Environment.jupyter_port, Environment.code_port))
+    rows = result.all()
+    used_ports: set[int] = set()
+    for ssh_port, jupyter_port, code_port in rows:
+        used_ports.add(ssh_port)
+        used_ports.add(jupyter_port)
+        used_ports.add(code_port)
+
+    ssh_port = _pick_free_port(20000, 25000, used_ports)
+    used_ports.add(ssh_port)
+    jupyter_port = _pick_free_port(25001, 30000, used_ports)
+    used_ports.add(jupyter_port)
+    code_port = _pick_free_port(30001, 35000, used_ports)
+    return ssh_port, jupyter_port, code_port
+
+
 @router.post("/", response_model=EnvironmentResponse, status_code=status.HTTP_201_CREATED)
 async def create_environment(env: EnvironmentCreate, db: AsyncSession = Depends(get_db)):
     # Logic to find available ports and GPUs will go here
     # For now, we will mock these values
 
-    # Mock allocation (In real logic, we should scan available ports)
-    # Using random ports to avoid conflict for demo
-    import random
     import pynvml
 
     # Real GPU Allocation Logic
@@ -80,29 +122,36 @@ async def create_environment(env: EnvironmentCreate, db: AsyncSession = Depends(
         # Allocate
         gpu_indices = available_indices[: env.gpu_count]
 
-    mock_gpu_indices = gpu_indices
-    mock_ssh_port = random.randint(20000, 25000)
-    mock_jupyter_port = random.randint(25001, 30000)
-    mock_code_port = random.randint(30001, 35000)
+    new_env = None
+    for _ in range(MAX_PORT_ALLOCATION_RETRIES):
+        ssh_port, jupyter_port, code_port = await _allocate_ports(db)
+        candidate_env = Environment(
+            name=env.name,
+            container_user=env.container_user,
+            root_password=env.root_password,
+            dockerfile_content=env.dockerfile_content,
+            mount_config=[m.dict() for m in env.mount_config],
+            gpu_indices=gpu_indices,
+            ssh_port=ssh_port,
+            jupyter_port=jupyter_port,
+            code_port=code_port,
+            status="building",
+        )
 
-    # In a real implementation, we would lock rows to prevent race conditions
+        db.add(candidate_env)
+        try:
+            await db.commit()
+            await db.refresh(candidate_env)
+            new_env = candidate_env
+            break
+        except IntegrityError:
+            await db.rollback()
 
-    new_env = Environment(
-        name=env.name,
-        container_user=env.container_user,
-        root_password=env.root_password,
-        dockerfile_content=env.dockerfile_content,
-        mount_config=[m.dict() for m in env.mount_config],
-        gpu_indices=mock_gpu_indices,
-        ssh_port=mock_ssh_port,
-        jupyter_port=mock_jupyter_port,
-        code_port=mock_code_port,
-        status="building",
-    )
-
-    db.add(new_env)
-    await db.commit()
-    await db.refresh(new_env)
+    if new_env is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Failed to allocate unique ports after several retries. Please try again.",
+        )
 
     jupyter_token = secrets.token_urlsafe(32)
     db.add(Setting(key=f"jupyter_token:{new_env.id}", value=jupyter_token))
