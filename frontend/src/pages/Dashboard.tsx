@@ -274,7 +274,9 @@ export default function Dashboard() {
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-[#3f3f46]">
-                        {environments.map((env) => (
+                        {[...environments]
+                          .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }))
+                          .map((env) => (
                             <tr key={env.id} className="hover:bg-[#3f3f46]/50 transition-colors">
                                 <td className="px-6 py-4">
                                   <div className="flex items-center gap-2">
