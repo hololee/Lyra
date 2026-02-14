@@ -23,7 +23,7 @@ export default function Provisioning() {
   const location = useLocation();
   const { showToast } = useToast();
   const [name, setName] = useState('');
-  const [password, setPassword] = useState('admin');
+  const [password, setPassword] = useState('');
 
   // Modal State
   const [modalConfig, setModalConfig] = useState({
