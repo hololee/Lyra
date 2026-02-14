@@ -13,14 +13,13 @@ class MountConfig(BaseModel):
 class EnvironmentBase(BaseModel):
     name: str = Field(pattern=r"^[a-zA-Z0-9-]+$")
     container_user: str = "root"
-    root_password: str = "admin"
     dockerfile_content: Optional[str] = None
     mount_config: List[MountConfig] = []
     gpu_count: int = 0
 
 
 class EnvironmentCreate(EnvironmentBase):
-    pass
+    root_password: str = "admin"
 
 
 class EnvironmentResponse(EnvironmentBase):

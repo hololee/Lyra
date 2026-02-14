@@ -2,10 +2,11 @@ from .worker import celery_app
 from .database import DATABASE_URL
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from .models import Environment
+from .models import Environment, Setting
 import docker
 import tempfile
 import os
+import secrets
 
 
 # Sync database setup for Celery
@@ -64,10 +65,21 @@ def create_environment_task(self, environment_id):
 
         # 2. Run Container
         # Basic container configuration
+        token_key = f"jupyter_token:{env.id}"
+        token_setting = db.query(Setting).filter(Setting.key == token_key).first()
+        if not token_setting:
+            token_setting = Setting(key=token_key, value=secrets.token_urlsafe(32))
+            db.add(token_setting)
+            db.commit()
+        jupyter_token = token_setting.value
+
         container_config = {
             "image": image_name,
             "name": f"lyra-{env.name}-{env.id}",  # Ensure unique name
             "detach": True,
+            "environment": {
+                "JUPYTER_TOKEN": jupyter_token
+            },
             "ports": {
                 '22/tcp': env.ssh_port,
                 '8888/tcp': env.jupyter_port,
@@ -84,7 +96,9 @@ def create_environment_task(self, environment_id):
                 "echo 'PermitRootLogin yes' >> /etc/ssh/sshd_config && "
                 "pip3 install jupyterlab && "
                 "/usr/sbin/sshd && "
-                "jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root\""
+                "jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root "
+                "--ServerApp.token=\"$JUPYTER_TOKEN\" "
+                "--NotebookApp.token=\"$JUPYTER_TOKEN\"\""
             )
         }
 

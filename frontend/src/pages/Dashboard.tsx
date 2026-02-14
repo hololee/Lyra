@@ -151,6 +151,21 @@ export default function Dashboard() {
     await copySshCommand(sshCommand);
   };
 
+  const openJupyter = async (env: Environment) => {
+    try {
+      const res = await axios.post(`environments/${env.id}/jupyter/launch`);
+      const launchUrl = String(res.data.launch_url || '');
+      if (!launchUrl) {
+        showToast('Unable to open Jupyter: launch URL was not returned.', 'error');
+        return;
+      }
+      const targetUrl = launchUrl.startsWith('http') ? launchUrl : `${window.location.origin}${launchUrl}`;
+      window.open(targetUrl, '_blank', 'noopener,noreferrer');
+    } catch {
+      showToast('Unable to open Jupyter. Please ensure the environment is running.', 'error');
+    }
+  };
+
   useEffect(() => {
     fetchEnvironments({ showLoading: true });
     const interval = setInterval(() => {
@@ -352,8 +367,9 @@ export default function Dashboard() {
                                             <div className="flex items-center gap-1.5" title="Jupyter Port">
                                                 <span>{env.jupyter_port}</span>
                                                 <button
+                                                    onClick={() => openJupyter(env)}
                                                     className="p-1 hover:bg-[#3f3f46] rounded text-gray-500 hover:text-orange-400 transition-colors"
-                                                    title="Open Jupyter Lab (Coming Soon)"
+                                                    title="Open Jupyter Lab"
                                                 >
                                                     <LayoutTemplate size={14} />
                                                 </button>

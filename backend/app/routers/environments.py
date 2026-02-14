@@ -1,17 +1,41 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from typing import List
 from ..database import get_db
-from ..models import Environment
+from ..models import Environment, Setting
 from ..schemas import EnvironmentCreate, EnvironmentResponse
 from ..tasks import create_environment_task
 import docker
+import secrets
+import time
 
 router = APIRouter(
     prefix="/environments",
     tags=["environments"],
 )
+
+JUPYTER_LAUNCH_TTL_SECONDS = 60
+jupyter_launch_tickets: dict[str, dict[str, str | float | bool]] = {}
+
+
+def _cleanup_expired_jupyter_tickets():
+    now = time.time()
+    expired = [
+        ticket
+        for ticket, meta in jupyter_launch_tickets.items()
+        if meta.get("used") or float(meta.get("expires_at", 0)) < now
+    ]
+    for ticket in expired:
+        jupyter_launch_tickets.pop(ticket, None)
+
+
+async def _get_jupyter_token(db: AsyncSession, environment_id: str) -> str | None:
+    key = f"jupyter_token:{environment_id}"
+    result = await db.execute(select(Setting).where(Setting.key == key))
+    token_setting = result.scalars().first()
+    return token_setting.value if token_setting else None
 
 
 @router.post("/", response_model=EnvironmentResponse, status_code=status.HTTP_201_CREATED)
@@ -79,6 +103,10 @@ async def create_environment(env: EnvironmentCreate, db: AsyncSession = Depends(
     db.add(new_env)
     await db.commit()
     await db.refresh(new_env)
+
+    jupyter_token = secrets.token_urlsafe(32)
+    db.add(Setting(key=f"jupyter_token:{new_env.id}", value=jupyter_token))
+    await db.commit()
 
     # Trigger Celery Task
     create_environment_task.delay(new_env.id)
@@ -228,6 +256,65 @@ async def get_environment_logs(environment_id: str, db: AsyncSession = Depends(g
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/{environment_id}/jupyter/launch")
+async def create_jupyter_launch_url(environment_id: str, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Environment).where(Environment.id == environment_id))
+    env = result.scalars().first()
+    if env is None:
+        raise HTTPException(status_code=404, detail="Environment not found")
+    if env.status != "running":
+        raise HTTPException(status_code=409, detail="Environment must be running")
+
+    token = await _get_jupyter_token(db, str(env.id))
+    if not token:
+        raise HTTPException(status_code=409, detail="Jupyter token is not configured. Recreate the environment.")
+
+    _cleanup_expired_jupyter_tickets()
+    launch_ticket = secrets.token_urlsafe(24)
+    jupyter_launch_tickets[launch_ticket] = {
+        "environment_id": str(env.id),
+        "expires_at": time.time() + JUPYTER_LAUNCH_TTL_SECONDS,
+        "used": False,
+    }
+
+    return {"launch_url": f"/api/environments/{environment_id}/jupyter/launch/{launch_ticket}"}
+
+
+@router.get("/{environment_id}/jupyter/launch/{launch_ticket}")
+async def launch_jupyter_with_ticket(
+    environment_id: str, launch_ticket: str, request: Request, db: AsyncSession = Depends(get_db)
+):
+    _cleanup_expired_jupyter_tickets()
+    ticket_meta = jupyter_launch_tickets.get(launch_ticket)
+    if not ticket_meta:
+        raise HTTPException(status_code=404, detail="Launch ticket not found or expired")
+    if ticket_meta.get("used"):
+        raise HTTPException(status_code=410, detail="Launch ticket already used")
+    if ticket_meta.get("environment_id") != environment_id:
+        raise HTTPException(status_code=400, detail="Launch ticket does not match environment")
+    if float(ticket_meta.get("expires_at", 0)) < time.time():
+        jupyter_launch_tickets.pop(launch_ticket, None)
+        raise HTTPException(status_code=410, detail="Launch ticket expired")
+
+    result = await db.execute(select(Environment).where(Environment.id == environment_id))
+    env = result.scalars().first()
+    if env is None:
+        raise HTTPException(status_code=404, detail="Environment not found")
+    if env.status != "running":
+        raise HTTPException(status_code=409, detail="Environment must be running")
+
+    token = await _get_jupyter_token(db, str(env.id))
+    if not token:
+        raise HTTPException(status_code=409, detail="Jupyter token is not configured. Recreate the environment.")
+
+    ticket_meta["used"] = True
+
+    scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
+    host = request.url.hostname or "localhost"
+    redirect_url = f"{scheme}://{host}:{env.jupyter_port}/?token={token}"
+    return RedirectResponse(url=redirect_url, status_code=307)
+
+
 @router.delete("/{environment_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_environment(environment_id: str, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Environment).where(Environment.id == environment_id))
@@ -247,8 +334,15 @@ async def delete_environment(environment_id: str, db: AsyncSession = Depends(get
     except Exception as e:
         print(f"Error removing container: {e}")
 
+    token_key = f"jupyter_token:{env.id}"
+    token_result = await db.execute(select(Setting).where(Setting.key == token_key))
+    token_setting = token_result.scalars().first()
+    if token_setting:
+        await db.delete(token_setting)
+
     await db.delete(env)
     await db.commit()
+    _cleanup_expired_jupyter_tickets()
 
     return None
 
