@@ -29,10 +29,12 @@ Source: `frontend/package.json` + installed metadata in `frontend/node_modules`
 | eslint-plugin-react-refresh | 0.4.26 | MIT |
 | framer-motion | 12.29.2 | MIT |
 | globals | 16.5.0 | MIT |
+| i18next | 25.8.7 | MIT |
 | lucide-react | 0.563.0 | ISC |
 | postcss | 8.5.6 | MIT |
 | react | 19.2.4 | MIT |
 | react-dom | 19.2.4 | MIT |
+| react-i18next | 16.5.4 | MIT |
 | react-router-dom | 7.13.0 | MIT |
 | tailwind-merge | 3.4.0 | MIT |
 | tailwindcss | 4.1.18 | MIT |
@@ -48,22 +50,22 @@ Source: `backend/requirements.txt` + backend environment license scan
 
 | Package | Version | License |
 |---|---:|---|
-| fastapi | 0.128.0 | MIT |
-| uvicorn | 0.40.0 | BSD-3-Clause |
+| fastapi | 0.129.0 | (unknown) |
+| uvicorn | 0.40.0 | (unknown) |
 | sqlalchemy | 2.0.46 | MIT |
-| asyncpg | 0.31.0 | Apache-2.0 |
+| asyncpg | 0.31.0 | (unknown) |
 | celery | 5.6.2 | BSD-3-Clause |
-| redis | 7.1.0 | MIT |
-| docker | 7.1.0 | Apache-2.0 |
-| nvidia-ml-py | 13.590.48 | BSD License |
-| python-multipart | 0.0.22 | Apache-2.0 |
-| websockets | 16.0 | BSD-3-Clause |
-| psycopg2-binary | 2.9.11 | LGPL |
+| redis | 7.1.1 | (unknown) |
+| docker | 7.1.0 | (unknown) |
+| nvidia-ml-py | 13.590.48 | BSD |
+| python-multipart | 0.0.22 | (unknown) |
+| websockets | 16.0 | (unknown) |
+| psycopg2-binary | 2.9.11 | LGPL with exceptions |
 | pytest | 9.0.2 | MIT |
-| httpx | 0.28.1 | BSD License |
-| ptyprocess | 0.7.0 | ISC |
-| paramiko | 4.0.0 | LGPL-2.1 |
-| alembic | 1.18.3 | MIT |
+| httpx | 0.28.1 | BSD-3-Clause |
+| ptyprocess | 0.7.0 | UNKNOWN |
+| paramiko | 4.0.0 | (unknown) |
+| alembic | 1.18.4 | (unknown) |
 
 ## Additional Transitive Licenses Requiring Attention
 
