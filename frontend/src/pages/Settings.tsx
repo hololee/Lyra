@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { AlertCircle, CheckCircle2, FolderOpen, Key, Lock, Save, Server } from 'lucide-react';
+import { AlertCircle, CheckCircle2, FolderOpen, ImageIcon, Key, Lock, Save, Server, Trash2 } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { encrypt } from '../utils/crypto';
@@ -7,9 +7,11 @@ import { encrypt } from '../utils/crypto';
 type StatusState = { type: 'idle' | 'loading' | 'success' | 'error'; message?: string };
 
 export default function Settings() {
-  const { appName, setAppName, isLoading: appLoading } = useApp();
+  const { appName, setAppName, faviconDataUrl, setFavicon, isLoading: appLoading } = useApp();
   const [localAppName, setLocalAppName] = useState(appName);
+  const [localFaviconDataUrl, setLocalFaviconDataUrl] = useState(faviconDataUrl);
   const [appNameStatus, setAppNameStatus] = useState<StatusState>({ type: 'idle' });
+  const [faviconStatus, setFaviconStatus] = useState<StatusState>({ type: 'idle' });
   const [sshStatus, setSshStatus] = useState<StatusState>({ type: 'idle' });
 
   // SSH Settings State
@@ -24,10 +26,15 @@ export default function Settings() {
   });
   const [isSettingsLoading, setIsSettingsLoading] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const faviconInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setLocalAppName(appName);
   }, [appName]);
+
+  useEffect(() => {
+    setLocalFaviconDataUrl(faviconDataUrl);
+  }, [faviconDataUrl]);
 
   useEffect(() => {
     const fetchSshSettings = async () => {
@@ -80,6 +87,56 @@ export default function Settings() {
     } catch (error) {
       console.error(error);
       setAppNameStatus({ type: 'error', message: 'Failed to update application name. Please try again.' });
+    }
+  };
+
+  const handleFaviconFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setFaviconStatus({ type: 'error', message: 'Please select an image file.' });
+      return;
+    }
+
+    if (file.size > 512 * 1024) {
+      setFaviconStatus({ type: 'error', message: 'Favicon must be 512KB or smaller.' });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const dataUrl = String(event.target?.result || '');
+      if (!dataUrl) return;
+      setLocalFaviconDataUrl(dataUrl);
+      setFaviconStatus({ type: 'idle' });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSaveFavicon = async () => {
+    try {
+      setFaviconStatus({ type: 'loading' });
+      await setFavicon(localFaviconDataUrl);
+      setFaviconStatus({ type: 'success', message: 'Favicon updated successfully!' });
+      setTimeout(() => setFaviconStatus({ type: 'idle' }), 3000);
+    } catch (error) {
+      console.error(error);
+      setFaviconStatus({ type: 'error', message: 'Failed to update favicon.' });
+    }
+  };
+
+  const handleResetFavicon = async () => {
+    try {
+      setFaviconStatus({ type: 'loading' });
+      setLocalFaviconDataUrl('');
+      await setFavicon('');
+      if (faviconInputRef.current) faviconInputRef.current.value = '';
+      setFaviconStatus({ type: 'success', message: 'Favicon reset to default.' });
+      setTimeout(() => setFaviconStatus({ type: 'idle' }), 3000);
+    } catch (error) {
+      console.error(error);
+      setFaviconStatus({ type: 'error', message: 'Failed to reset favicon.' });
     }
   };
 
@@ -211,6 +268,55 @@ export default function Settings() {
                 <button type="submit" disabled={isLoading} className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2.5 rounded-lg font-medium flex items-center gap-2"><Save size={18} />Save</button>
               </div>
             </div>
+
+            <div className="space-y-3 pt-2">
+              <label className="block text-sm font-medium text-gray-300">Favicon</label>
+              <div className="flex items-center gap-4">
+                <div className="h-12 w-12 rounded-lg border border-[#3f3f46] bg-[#18181b] flex items-center justify-center overflow-hidden">
+                  {localFaviconDataUrl ? (
+                    <img src={localFaviconDataUrl} alt="Favicon preview" className="h-8 w-8 object-contain" />
+                  ) : (
+                    <ImageIcon size={18} className="text-gray-500" />
+                  )}
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    type="file"
+                    ref={faviconInputRef}
+                    onChange={handleFaviconFileChange}
+                    accept="image/png,image/x-icon,image/svg+xml,image/jpeg,image/webp"
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => faviconInputRef.current?.click()}
+                    className="bg-[#3f3f46] hover:bg-[#52525b] text-white px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                  >
+                    Select File
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveFavicon}
+                    disabled={isLoading}
+                    className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Save size={14} />
+                    Save Favicon
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleResetFavicon}
+                    disabled={isLoading}
+                    className="bg-[#3f3f46] hover:bg-[#52525b] text-white px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Trash2 size={14} />
+                    Reset
+                  </button>
+                </div>
+              </div>
+              <p className="text-[11px] text-gray-500">Recommended: square icon (32x32 or 64x64), max 512KB.</p>
+            </div>
+
             {appNameStatus.message && (
               <div className={`flex items-center gap-2 text-sm p-3 rounded-lg border ${
                 appNameStatus.type === 'success'
@@ -219,6 +325,16 @@ export default function Settings() {
               }`}>
                 {appNameStatus.type === 'success' ? <CheckCircle2 size={18} className="shrink-0" /> : <AlertCircle size={18} className="shrink-0" />}
                 <span className="font-medium">{appNameStatus.message}</span>
+              </div>
+            )}
+            {faviconStatus.message && (
+              <div className={`flex items-center gap-2 text-sm p-3 rounded-lg border ${
+                faviconStatus.type === 'success'
+                  ? 'text-green-400 bg-green-500/5 border-green-500/20'
+                  : 'text-red-400 bg-red-500/5 border-red-500/20'
+              }`}>
+                {faviconStatus.type === 'success' ? <CheckCircle2 size={18} className="shrink-0" /> : <AlertCircle size={18} className="shrink-0" />}
+                <span className="font-medium">{faviconStatus.message}</span>
               </div>
             )}
           </form>
