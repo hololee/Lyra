@@ -355,17 +355,10 @@ async def read_environments(skip: int = 0, limit: int = 100, db: AsyncSession = 
                 if env.status == 'stopping':
                     if state_status in ['created', 'restarting', 'starting']:
                         new_status = 'stopping'
-                    elif exit_code is None:
-                        new_status = 'stopped'
-                    elif exit_code in [0, 143]:
-                        new_status = 'stopped'
-                    elif exit_code == 137:
-                        if oom_killed or str(error_msg).strip():
-                            new_status = 'error'
-                        else:
-                            new_status = 'stopped'
                     else:
-                        new_status = 'error'
+                        # User-initiated stop may end with non-zero exit codes (e.g. SIGKILL/137).
+                        # While we're in stopping state, treat any finished container as stopped.
+                        new_status = 'stopped'
                 elif env.status == 'starting':
                     if state_status in ['created', 'restarting', 'starting'] and exit_code is None:
                         new_status = 'starting'
