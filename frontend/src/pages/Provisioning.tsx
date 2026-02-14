@@ -553,6 +553,9 @@ export default function Provisioning() {
                         minimap: { enabled: false },
                         fontSize: 14,
                         scrollBeyondLastLine: false,
+                        scrollbar: {
+                            alwaysConsumeMouseWheel: false,
+                        },
                         padding: { top: 20, bottom: 20 },
                         fontFamily: "'JetBrains Mono', 'Fira Code', monospace"
                     }}
