@@ -302,7 +302,7 @@ export default function Provisioning() {
 
       <header className="flex justify-between items-center">
         <div>
-          <h2 className="text-3xl font-bold text-white tracking-tight">New Environment</h2>
+          <h2 className="text-3xl font-bold text-white tracking-tight">Provisioning</h2>
           <p className="text-gray-400 mt-1">Configure your GPU instance and build environment.</p>
         </div>
         <div className="flex gap-3">
