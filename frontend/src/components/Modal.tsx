@@ -24,22 +24,22 @@ export default function Modal({
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-            <div className="bg-[#18181b] border border-[#3f3f46] rounded-xl w-full max-w-md shadow-2xl transform transition-all scale-100 opacity-100 animate-in fade-in zoom-in duration-200">
-                <div className="flex justify-between items-center p-6 border-b border-[#3f3f46]">
-                    <h3 className="text-lg font-bold text-white">{title}</h3>
-                    <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--overlay)] p-4 backdrop-blur-sm">
+            <div className="w-full max-w-md scale-100 transform rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] opacity-100 shadow-2xl transition-all animate-in fade-in zoom-in duration-200">
+                <div className="flex items-center justify-between border-b border-[var(--border)] p-6">
+                    <h3 className="text-lg font-bold text-[var(--text)]">{title}</h3>
+                    <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text)] transition-colors">
                         <X size={20} />
                     </button>
                 </div>
                 <div className="p-6">
-                    <p className="text-gray-300">{message}</p>
+                    <p className="text-[var(--text-muted)]">{message}</p>
                 </div>
-                <div className="flex justify-end gap-3 p-6 bg-[#27272a]/50 rounded-b-xl border-t border-[#3f3f46]">
+                <div className="flex justify-end gap-3 rounded-b-xl border-t border-[var(--border)] bg-[var(--bg-soft)] p-6">
                     {type === 'confirm' && (
                         <button
                             onClick={onClose}
-                            className="px-4 py-2 text-sm font-medium text-gray-300 hover:text-white bg-[#3f3f46] hover:bg-[#52525b] rounded-lg transition-colors"
+                            className="rounded-lg border border-[var(--border)] bg-[var(--bg-soft)] px-4 py-2 text-sm font-medium text-[var(--text)] transition-colors hover:brightness-95"
                         >
                             {t('actions.cancel')}
                         </button>
@@ -49,10 +49,10 @@ export default function Modal({
                             if (onConfirm) onConfirm();
                             onClose();
                         }}
-                        className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors shadow-lg ${
+                        className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors shadow-lg ${
                             isDestructive
-                            ? "bg-red-600 hover:bg-red-500 shadow-red-600/20"
-                            : "bg-blue-600 hover:bg-blue-500 shadow-blue-600/20"
+                            ? "bg-[var(--danger)] text-[var(--primary-contrast)] hover:brightness-110"
+                            : "bg-[var(--primary)] text-[var(--primary-contrast)] hover:brightness-110"
                         }`}
                     >
                         {type === 'confirm' ? t('actions.confirm') : t('actions.ok')}

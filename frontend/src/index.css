@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+KR:wght@400;500;600;700;800&display=swap");
 
 @theme {
   --color-primary: #3b82f6;
@@ -6,19 +7,59 @@
 }
 
 @layer base {
+  :root {
+    --bg: #e4e7ec;
+    --bg-soft: #edf1f6;
+    --bg-elevated: #f7f8fb;
+    --surface: #eceff4;
+    --overlay: rgb(15 23 42 / 0.38);
+    --border: #c9ced8;
+    --text: #18181b;
+    --text-muted: #52525b;
+    --primary: #2563eb;
+    --primary-contrast: #ffffff;
+    --danger: #dc2626;
+    --success: #16a34a;
+    --terminal-bg: #000000;
+    --terminal-border: #3f3f46;
+  }
+
+  html.theme-dark {
+    --bg: #121316;
+    --bg-soft: #1a1c22;
+    --bg-elevated: #23242b;
+    --surface: #1a1b20;
+    --overlay: rgb(0 0 0 / 0.58);
+    --border: #343743;
+    --text: #ffffff;
+    --text-muted: #a1a1aa;
+    --primary: #3b82f6;
+    --primary-contrast: #ffffff;
+    --danger: #ef4444;
+    --success: #22c55e;
+    --terminal-bg: #000000;
+    --terminal-border: #3f3f46;
+  }
+
   html, body {
-    @apply bg-[#18181b] text-white;
+    background-color: var(--bg);
+    color: var(--text);
+    font-family: "Inter", "Noto Sans KR", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     margin: 0;
     padding: 0;
     overscroll-behavior: none; /* Disable global bounce */
+  }
+
+  input, textarea, select, button {
+    font-family: inherit;
   }
 }
 
 /* Custom Utilities */
 .glass {
-    background: rgba(24, 24, 27, 0.7);
+    background: color-mix(in oklab, var(--bg-elevated) 78%, transparent);
     backdrop-filter: blur(10px);
-    border: 1px solid rgba(63, 63, 70, 0.5);
+    border: 1px solid color-mix(in oklab, var(--border) 60%, transparent);
 }
 
 .scrollbar-hide {

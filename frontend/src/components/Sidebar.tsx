@@ -18,7 +18,7 @@ export default function Sidebar() {
   const { t } = useTranslation();
 
   return (
-    <div className="w-64 bg-[#18181b] border-r border-[#27272a] flex flex-col">
+    <div className="w-64 bg-[var(--bg-elevated)] border-r border-[var(--border)] flex flex-col">
       <div className="p-6">
         <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
           {appName}
@@ -34,18 +34,18 @@ export default function Sidebar() {
               className={clsx(
                 "flex items-center px-4 py-3 rounded-lg transition-all duration-200 group",
                 isActive
-                  ? "bg-blue-600/10 text-blue-400"
-                  : "text-gray-400 hover:bg-[#27272a] hover:text-white"
+                  ? "bg-[color-mix(in_oklab,var(--primary)_14%,transparent)] text-[var(--primary)]"
+                  : "text-[var(--text-muted)] hover:bg-[var(--bg-soft)] hover:text-[var(--text)]"
               )}
             >
-              <item.icon size={20} className={clsx("mr-3", isActive ? "text-blue-400" : "group-hover:text-white")} />
+              <item.icon size={20} className={clsx("mr-3", isActive ? "text-[var(--primary)]" : "text-[var(--text-muted)] group-hover:text-[var(--text)]")} />
               <span className="font-medium">{t(item.nameKey)}</span>
             </Link>
           );
         })}
       </nav>
-      <div className="p-4 border-t border-[#27272a]">
-        <div className="flex items-center gap-3 text-sm text-gray-500">
+      <div className="p-4 border-t border-[var(--border)]">
+        <div className="flex items-center gap-3 text-sm text-[var(--text-muted)]">
            <div className="w-2 h-2 rounded-full bg-green-500"></div>
            {t('system.status')}: {t('system.online')}
         </div>
