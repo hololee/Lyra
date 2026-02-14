@@ -2,6 +2,7 @@ import axios from 'axios';
 import { HardDrive, HelpCircle, LayoutTemplate, Network, Play, RefreshCw, Square, SquareTerminal, Trash2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import Modal from '../components/Modal';
+import { useToast } from '../context/ToastContext';
 
 interface MountConfig {
   host_path: string;
@@ -13,6 +14,7 @@ interface Environment {
   id: string;
   name: string;
   status: string;
+  container_user?: string;
   gpu_indices: number[];
   container_id?: string;
   ssh_port: number;
@@ -24,6 +26,7 @@ interface Environment {
 const ENVS_CACHE_KEY = 'lyra.dashboard.environments';
 
 export default function Dashboard() {
+  const { showToast } = useToast();
   const [environments, setEnvironments] = useState<Environment[]>(() => {
     try {
       if (typeof window === 'undefined') return [];
@@ -130,6 +133,22 @@ export default function Dashboard() {
     await withActionLoading(env.id, async () => {
       await axios.post(`environments/${env.id}/stop`);
     });
+  };
+
+  const copySshCommand = async (sshCommand: string) => {
+    try {
+      await navigator.clipboard.writeText(sshCommand);
+      showToast('SSH command copied to clipboard.', 'success');
+    } catch {
+      showToast(`Unable to copy. Run manually: ${sshCommand}`, 'error');
+    }
+  };
+
+  const copyEnvSshCommand = async (env: Environment) => {
+    const host = window.location.hostname;
+    const sshUser = env.container_user || 'root';
+    const sshCommand = `ssh -p ${env.ssh_port} ${sshUser}@${host}`;
+    await copySshCommand(sshCommand);
   };
 
   useEffect(() => {
@@ -318,8 +337,10 @@ export default function Dashboard() {
                                         <div className="flex items-center gap-1.5" title="SSH Port">
                                             <span>{env.ssh_port}</span>
                                             <button
+                                                onClick={() => copyEnvSshCommand(env)}
+                                                disabled={env.status !== 'running'}
                                                 className="p-1 hover:bg-[#3f3f46] rounded text-gray-500 hover:text-blue-400 transition-colors"
-                                                title="Connect via SSH (Coming Soon)"
+                                                title={env.status === 'running' ? 'Copy SSH command' : 'Environment must be running'}
                                             >
                                                 <SquareTerminal size={14} />
                                             </button>

@@ -161,7 +161,7 @@ export default function Provisioning() {
           setIsSaveModalOpen(false);
           setTemplateName('');
           setTemplateDesc('');
-          showToast("Template saved successfully!", "success");
+          showToast("Template has been saved.", "success");
       } catch (error) {
           console.error("Failed to save template", error);
           showToast("Failed to save template.", "error");
@@ -521,9 +521,9 @@ export default function Provisioning() {
                                         if (template.config.dockerfile_content) {
                                             setDockerfile(template.config.dockerfile_content);
                                             setIsLoadModalOpen(false);
-                                            showToast("Template loaded successfully!", "success");
+                                            showToast("Template has been loaded.", "success");
                                         } else {
-                                            showToast("This template has no Dockerfile content.", "error");
+                                            showToast("This template does not include Dockerfile content.", "error");
                                         }
                                     }}
                                     className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-md transition-colors flex items-center gap-1.5 shadow-lg shadow-blue-500/20"
