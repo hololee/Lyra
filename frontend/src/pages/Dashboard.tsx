@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Code2, HardDrive, HelpCircle, LayoutTemplate, Play, RefreshCw, Square, SquareTerminal, Trash2, X } from 'lucide-react';
+import { Code2, HardDrive, HelpCircle, LayoutTemplate, Network, Play, RefreshCw, Square, SquareTerminal, Trash2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import Modal from '../components/Modal';
 import { useToast } from '../context/ToastContext';
@@ -8,6 +8,11 @@ interface MountConfig {
   host_path: string;
   container_path: string;
   mode: string;
+}
+
+interface CustomPortMapping {
+  host_port: number;
+  container_port: number;
 }
 
 interface Environment {
@@ -22,6 +27,7 @@ interface Environment {
   code_port: number;
   created_at: string;
   mount_config: MountConfig[];
+  custom_ports: CustomPortMapping[];
 }
 
 const ENVS_CACHE_KEY = 'lyra.dashboard.environments';
@@ -49,6 +55,7 @@ export default function Dashboard() {
   });
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [selectedVolEnv, setSelectedVolEnv] = useState<Environment | null>(null);
+  const [selectedPortEnv, setSelectedPortEnv] = useState<Environment | null>(null);
   const [errorLogEnv, setErrorLogEnv] = useState<Environment | null>(null);
   const [errorLog, setErrorLog] = useState<string>("");
   const [logLoading, setLogLoading] = useState(false);
@@ -171,10 +178,7 @@ export default function Dashboard() {
     const protocol = window.location.protocol;
     const host = window.location.hostname;
     const url = `${protocol}//${host}:${env.code_port}`;
-    const win = window.open(url, '_blank', 'noopener,noreferrer');
-    if (!win) {
-      showToast('Unable to open code-server window.', 'error');
-    }
+    window.open(url, '_blank', 'noopener,noreferrer');
   };
 
   useEffect(() => {
@@ -234,6 +238,49 @@ export default function Dashboard() {
                 <div className="p-4 border-t border-[#3f3f46] bg-[#27272a]/50 flex justify-end">
                     <button
                         onClick={() => setSelectedVolEnv(null)}
+                        className="px-4 py-2 rounded-lg text-sm font-medium bg-[#3f3f46] hover:bg-[#52525b] text-white transition-all"
+                    >
+                        Close
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
+
+      {/* Port Details Modal */}
+      {selectedPortEnv && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+            <div className="bg-[#18181b] rounded-xl border border-[#3f3f46] shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
+                <div className="p-6 border-b border-[#3f3f46] flex justify-between items-center">
+                    <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                        <Network size={20} className="text-cyan-400" />
+                        Custom Port Mappings
+                    </h3>
+                    <button onClick={() => setSelectedPortEnv(null)} className="text-gray-400 hover:text-white transition-colors">
+                        <X size={20} />
+                    </button>
+                </div>
+                <div className="p-6">
+                    <p className="text-gray-400 text-sm mb-4">
+                        Custom ports for <span className="text-white font-medium">{selectedPortEnv.name}</span>
+                    </p>
+                    <div className="space-y-3">
+                        {selectedPortEnv.custom_ports.map((mapping, idx) => (
+                            <div key={`${mapping.host_port}-${mapping.container_port}-${idx}`} className="bg-[#27272a] p-3 rounded-lg border border-[#3f3f46] text-sm">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xs font-bold text-cyan-400 uppercase w-14 shrink-0">Host</span>
+                                    <span className="text-gray-300 font-mono">{mapping.host_port}</span>
+                                    <span className="text-gray-600 px-2">:</span>
+                                    <span className="text-xs font-bold text-green-400 uppercase w-10 shrink-0">Port</span>
+                                    <span className="text-gray-300 font-mono">{mapping.container_port}</span>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+                <div className="p-4 border-t border-[#3f3f46] bg-[#27272a]/50 flex justify-end">
+                    <button
+                        onClick={() => setSelectedPortEnv(null)}
                         className="px-4 py-2 rounded-lg text-sm font-medium bg-[#3f3f46] hover:bg-[#52525b] text-white transition-all"
                     >
                         Close
@@ -447,6 +494,22 @@ export default function Dashboard() {
                                         title={env.mount_config && env.mount_config.length > 0 ? "View Volumes" : "No Volumes"}
                                     >
                                         <HardDrive size={18} />
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            if (env.custom_ports && env.custom_ports.length > 0) {
+                                                setSelectedPortEnv(env);
+                                            }
+                                        }}
+                                        disabled={!env.custom_ports || env.custom_ports.length === 0}
+                                        className={`p-2 rounded-lg transition-colors ${
+                                            env.custom_ports && env.custom_ports.length > 0
+                                            ? "text-gray-400 hover:text-cyan-400 hover:bg-cyan-500/10"
+                                            : "text-gray-600 cursor-not-allowed opacity-30"
+                                        }`}
+                                        title={env.custom_ports && env.custom_ports.length > 0 ? "View Custom Ports" : "No Custom Ports"}
+                                    >
+                                        <Network size={18} />
                                     </button>
                                     <button
                                         onClick={() => setDeleteId(env.id)}

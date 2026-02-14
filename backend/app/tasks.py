@@ -8,6 +8,7 @@ import tempfile
 import os
 import secrets
 import random
+import json
 
 
 # Sync database setup for Celery
@@ -17,6 +18,7 @@ SYNC_DATABASE_URL = DATABASE_URL.replace("postgresql+asyncpg", "postgresql")
 engine = create_engine(SYNC_DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine)
 CONTAINER_RUN_PORT_RETRIES = 3
+CUSTOM_HOST_PORT_RANGE = (35001, 60000)
 
 
 def _get_docker_used_ports() -> set[int]:
@@ -61,6 +63,19 @@ def _allocate_ports(db, exclude_environment_id=None):
         blocked_ports.add(jupyter_port)
         blocked_ports.add(code_port)
 
+    custom_port_settings = db.query(Setting).filter(Setting.key.like("custom_ports:%")).all()
+    for setting in custom_port_settings:
+        try:
+            mappings = json.loads(setting.value)
+        except Exception:
+            continue
+        for mapping in mappings or []:
+            host_port = mapping.get("host_port")
+            if isinstance(host_port, int):
+                blocked_ports.add(host_port)
+            elif isinstance(host_port, str) and host_port.isdigit():
+                blocked_ports.add(int(host_port))
+
     blocked_ports.update(_get_docker_used_ports())
 
     ssh_port = _pick_free_port(20000, 25000, blocked_ports)
@@ -69,6 +84,38 @@ def _allocate_ports(db, exclude_environment_id=None):
     blocked_ports.add(jupyter_port)
     code_port = _pick_free_port(30001, 35000, blocked_ports)
     return ssh_port, jupyter_port, code_port
+
+
+def _allocate_custom_host_ports(db, count: int, exclude_environment_id=None):
+    blocked_ports = _get_docker_used_ports()
+    rows = db.query(Environment.ssh_port, Environment.jupyter_port, Environment.code_port).all()
+    for ssh_port, jupyter_port, code_port in rows:
+        blocked_ports.add(ssh_port)
+        blocked_ports.add(jupyter_port)
+        blocked_ports.add(code_port)
+
+    custom_port_settings = db.query(Setting).filter(Setting.key.like("custom_ports:%")).all()
+    for setting in custom_port_settings:
+        if exclude_environment_id is not None and setting.key == f"custom_ports:{exclude_environment_id}":
+            continue
+        try:
+            mappings = json.loads(setting.value)
+        except Exception:
+            continue
+        for mapping in mappings or []:
+            host_port = mapping.get("host_port")
+            if isinstance(host_port, int):
+                blocked_ports.add(host_port)
+            elif isinstance(host_port, str) and host_port.isdigit():
+                blocked_ports.add(int(host_port))
+
+    host_start, host_end = CUSTOM_HOST_PORT_RANGE
+    allocated = []
+    for _ in range(count):
+        host_port = _pick_free_port(host_start, host_end, blocked_ports)
+        blocked_ports.add(host_port)
+        allocated.append(host_port)
+    return allocated
 
 
 @celery_app.task(bind=True)
@@ -126,6 +173,15 @@ def create_environment_task(self, environment_id):
             db.add(token_setting)
             db.commit()
         jupyter_token = token_setting.value
+
+        custom_ports_key = f"custom_ports:{env.id}"
+        custom_ports_setting = db.query(Setting).filter(Setting.key == custom_ports_key).first()
+        custom_ports = []
+        if custom_ports_setting:
+            try:
+                custom_ports = json.loads(custom_ports_setting.value) or []
+            except Exception:
+                custom_ports = []
 
         container_config = {
             "image": image_name,
@@ -196,11 +252,18 @@ def create_environment_task(self, environment_id):
             container_config['volumes'] = volumes
 
         for attempt in range(CONTAINER_RUN_PORT_RETRIES):
-            container_config["ports"] = {
+            ports_config = {
                 '22/tcp': env.ssh_port,
                 '8888/tcp': env.jupyter_port,
                 '8080/tcp': env.code_port
             }
+            for mapping in custom_ports:
+                container_port = mapping.get("container_port")
+                host_port = mapping.get("host_port")
+                if container_port is None or host_port is None:
+                    continue
+                ports_config[f"{int(container_port)}/tcp"] = int(host_port)
+            container_config["ports"] = ports_config
             try:
                 client.containers.run(**container_config)
                 break
@@ -213,6 +276,14 @@ def create_environment_task(self, environment_id):
                 env.ssh_port = new_ssh_port
                 env.jupyter_port = new_jupyter_port
                 env.code_port = new_code_port
+                if custom_ports:
+                    new_custom_host_ports = _allocate_custom_host_ports(
+                        db, len(custom_ports), exclude_environment_id=env.id
+                    )
+                    for idx, mapping in enumerate(custom_ports):
+                        mapping["host_port"] = new_custom_host_ports[idx]
+                    if custom_ports_setting:
+                        custom_ports_setting.value = json.dumps(custom_ports)
                 db.commit()
 
         env.status = "running"

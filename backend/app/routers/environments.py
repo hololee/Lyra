@@ -5,13 +5,20 @@ from sqlalchemy.future import select
 from typing import List
 from ..database import get_db
 from ..models import Environment, Setting
-from ..schemas import EnvironmentCreate, EnvironmentResponse
+from ..schemas import (
+    CustomPortAllocateRequest,
+    CustomPortAllocateResponse,
+    CustomPortMapping,
+    EnvironmentCreate,
+    EnvironmentResponse,
+)
 from ..tasks import create_environment_task
 import docker
 import secrets
 import time
 import random
 from sqlalchemy.exc import IntegrityError
+import json
 
 router = APIRouter(
     prefix="/environments",
@@ -21,6 +28,9 @@ router = APIRouter(
 JUPYTER_LAUNCH_TTL_SECONDS = 60
 jupyter_launch_tickets: dict[str, dict[str, str | float | bool]] = {}
 MAX_PORT_ALLOCATION_RETRIES = 8
+CUSTOM_HOST_PORT_RANGE = (35001, 60000)
+CUSTOM_CONTAINER_PORT_RANGE = (10000, 20000)
+RESERVED_CONTAINER_PORTS = {22, 8080, 8888}
 
 
 def _cleanup_expired_jupyter_tickets():
@@ -39,6 +49,49 @@ async def _get_jupyter_token(db: AsyncSession, environment_id: str) -> str | Non
     result = await db.execute(select(Setting).where(Setting.key == key))
     token_setting = result.scalars().first()
     return token_setting.value if token_setting else None
+
+
+def _normalize_custom_ports(raw_ports) -> list[dict]:
+    if not raw_ports:
+        return []
+    normalized = []
+    for item in raw_ports:
+        if isinstance(item, CustomPortMapping):
+            host_port = int(item.host_port)
+            container_port = int(item.container_port)
+        elif isinstance(item, dict):
+            host_port = int(item.get("host_port"))
+            container_port = int(item.get("container_port"))
+        else:
+            continue
+        normalized.append({"host_port": host_port, "container_port": container_port})
+    return normalized
+
+
+async def _get_custom_ports_map(db: AsyncSession) -> dict[str, list[dict]]:
+    result = await db.execute(select(Setting).where(Setting.key.like("custom_ports:%")))
+    settings = result.scalars().all()
+    custom_ports_map: dict[str, list[dict]] = {}
+    for setting in settings:
+        try:
+            env_id = setting.key.split("custom_ports:", 1)[1]
+            parsed = json.loads(setting.value)
+            custom_ports_map[env_id] = _normalize_custom_ports(parsed)
+        except Exception:
+            continue
+    return custom_ports_map
+
+
+async def _get_custom_ports_for_environment(db: AsyncSession, environment_id: str) -> list[dict]:
+    result = await db.execute(select(Setting).where(Setting.key == f"custom_ports:{environment_id}"))
+    setting = result.scalars().first()
+    if not setting:
+        return []
+    try:
+        parsed = json.loads(setting.value)
+        return _normalize_custom_ports(parsed)
+    except Exception:
+        return []
 
 
 def _get_docker_used_ports() -> set[int]:
@@ -83,6 +136,13 @@ async def _allocate_ports(db: AsyncSession) -> tuple[int, int, int]:
         blocked_ports.add(jupyter_port)
         blocked_ports.add(code_port)
 
+    custom_ports_map = await _get_custom_ports_map(db)
+    for mappings in custom_ports_map.values():
+        for mapping in mappings:
+            host_port = mapping.get("host_port")
+            if isinstance(host_port, int):
+                blocked_ports.add(host_port)
+
     blocked_ports.update(_get_docker_used_ports())
 
     ssh_port = _pick_free_port(20000, 25000, blocked_ports)
@@ -91,6 +151,78 @@ async def _allocate_ports(db: AsyncSession) -> tuple[int, int, int]:
     blocked_ports.add(jupyter_port)
     code_port = _pick_free_port(30001, 35000, blocked_ports)
     return ssh_port, jupyter_port, code_port
+
+
+async def _collect_blocked_host_ports(db: AsyncSession) -> set[int]:
+    blocked_ports: set[int] = set()
+    result = await db.execute(select(Environment.ssh_port, Environment.jupyter_port, Environment.code_port))
+    rows = result.all()
+    for ssh_port, jupyter_port, code_port in rows:
+        blocked_ports.add(ssh_port)
+        blocked_ports.add(jupyter_port)
+        blocked_ports.add(code_port)
+
+    custom_ports_map = await _get_custom_ports_map(db)
+    for mappings in custom_ports_map.values():
+        for mapping in mappings:
+            host_port = mapping.get("host_port")
+            if isinstance(host_port, int):
+                blocked_ports.add(host_port)
+
+    blocked_ports.update(_get_docker_used_ports())
+    return blocked_ports
+
+
+def _validate_custom_ports(custom_ports: list[dict]):
+    host_ports = set()
+    container_ports = set()
+    for mapping in custom_ports:
+        host_port = mapping["host_port"]
+        container_port = mapping["container_port"]
+        if host_port in host_ports:
+            raise HTTPException(status_code=400, detail=f"Duplicate host port in custom mappings: {host_port}")
+        if container_port in container_ports:
+            raise HTTPException(status_code=400, detail=f"Duplicate container port in custom mappings: {container_port}")
+        if container_port in RESERVED_CONTAINER_PORTS:
+            raise HTTPException(status_code=400, detail=f"Container port {container_port} is reserved")
+        host_ports.add(host_port)
+        container_ports.add(container_port)
+
+
+async def _allocate_custom_port_mappings(
+    db: AsyncSession,
+    count: int,
+    current_ports: list[dict] | None = None,
+) -> list[dict]:
+    if count <= 0:
+        return []
+    blocked_host_ports = await _collect_blocked_host_ports(db)
+    existing = _normalize_custom_ports(current_ports or [])
+    for mapping in existing:
+        blocked_host_ports.add(mapping["host_port"])
+
+    blocked_container_ports = set(RESERVED_CONTAINER_PORTS)
+    for mapping in existing:
+        blocked_container_ports.add(mapping["container_port"])
+
+    mappings: list[dict] = []
+    host_start, host_end = CUSTOM_HOST_PORT_RANGE
+    container_start, container_end = CUSTOM_CONTAINER_PORT_RANGE
+    for _ in range(count):
+        host_port = _pick_free_port(host_start, host_end, blocked_host_ports)
+        blocked_host_ports.add(host_port)
+        container_port = _pick_free_port(container_start, container_end, blocked_container_ports)
+        blocked_container_ports.add(container_port)
+        mappings.append({"host_port": host_port, "container_port": container_port})
+
+    return mappings
+
+
+@router.post("/ports/allocate", response_model=CustomPortAllocateResponse)
+async def allocate_custom_ports(payload: CustomPortAllocateRequest, db: AsyncSession = Depends(get_db)):
+    count = payload.count if payload.count > 0 else 1
+    mappings = await _allocate_custom_port_mappings(db, count=count, current_ports=payload.current_ports)
+    return {"mappings": mappings}
 
 
 @router.post("/", response_model=EnvironmentResponse, status_code=status.HTTP_201_CREATED)
@@ -132,6 +264,16 @@ async def create_environment(env: EnvironmentCreate, db: AsyncSession = Depends(
         # Allocate
         gpu_indices = available_indices[: env.gpu_count]
 
+    custom_ports = _normalize_custom_ports(env.custom_ports)
+    _validate_custom_ports(custom_ports)
+    blocked_host_ports = await _collect_blocked_host_ports(db)
+    for mapping in custom_ports:
+        if mapping["host_port"] in blocked_host_ports:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Custom host port {mapping['host_port']} is already in use. Please regenerate ports.",
+            )
+
     new_env = None
     for _ in range(MAX_PORT_ALLOCATION_RETRIES):
         ssh_port, jupyter_port, code_port = await _allocate_ports(db)
@@ -165,18 +307,22 @@ async def create_environment(env: EnvironmentCreate, db: AsyncSession = Depends(
 
     jupyter_token = secrets.token_urlsafe(32)
     db.add(Setting(key=f"jupyter_token:{new_env.id}", value=jupyter_token))
+    db.add(Setting(key=f"custom_ports:{new_env.id}", value=json.dumps(custom_ports)))
     await db.commit()
 
     # Trigger Celery Task
     create_environment_task.delay(new_env.id)
 
-    return new_env
+    env_dict = {**new_env.__dict__, "custom_ports": custom_ports}
+    env_dict.pop("_sa_instance_state", None)
+    return env_dict
 
 
 @router.get("/", response_model=List[EnvironmentResponse])
 async def read_environments(skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Environment).offset(skip).limit(limit))
     envs = result.scalars().all()
+    custom_ports_map = await _get_custom_ports_map(db)
 
     client = docker.from_env()
     status_changed = False
@@ -257,7 +403,11 @@ async def read_environments(skip: int = 0, limit: int = 100, db: AsyncSession = 
         except Exception as e:
             print(f"Error checking container status: {e}")
 
-        env_dict = {**env.__dict__, "container_id": container_id}
+        env_dict = {
+            **env.__dict__,
+            "container_id": container_id,
+            "custom_ports": custom_ports_map.get(str(env.id), []),
+        }
         env_dict.pop("_sa_instance_state", None)
         env_responses.append(env_dict)
 
@@ -273,7 +423,10 @@ async def read_environment(environment_id: str, db: AsyncSession = Depends(get_d
     env = result.scalars().first()
     if env is None:
         raise HTTPException(status_code=404, detail="Environment not found")
-    return env
+    custom_ports = await _get_custom_ports_for_environment(db, str(env.id))
+    env_dict = {**env.__dict__, "custom_ports": custom_ports}
+    env_dict.pop("_sa_instance_state", None)
+    return env_dict
 
 
 @router.get("/{environment_id}/logs")
@@ -398,6 +551,12 @@ async def delete_environment(environment_id: str, db: AsyncSession = Depends(get
     token_setting = token_result.scalars().first()
     if token_setting:
         await db.delete(token_setting)
+
+    custom_ports_key = f"custom_ports:{env.id}"
+    custom_ports_result = await db.execute(select(Setting).where(Setting.key == custom_ports_key))
+    custom_ports_setting = custom_ports_result.scalars().first()
+    if custom_ports_setting:
+        await db.delete(custom_ports_setting)
 
     await db.delete(env)
     await db.commit()
