@@ -20,6 +20,23 @@ export default function TerminalPage() {
   const [masterPassword, setMasterPassword] = useState('');
   const [error, setError] = useState('');
   const [authMethod, setAuthMethod] = useState<string | null>(null);
+  const terminalMessagesRef = useRef({
+    connectedService: '',
+    errorKeyNotFound: '',
+    keyDecrypted: '',
+    decryptFailed: '',
+    connectionClosed: '',
+  });
+
+  useEffect(() => {
+    terminalMessagesRef.current = {
+      connectedService: t('terminal.connectedService'),
+      errorKeyNotFound: t('terminal.errorKeyNotFound'),
+      keyDecrypted: t('terminal.keyDecrypted'),
+      decryptFailed: t('terminal.decryptFailed'),
+      connectionClosed: t('terminal.connectionClosed'),
+    };
+  }, [t]);
 
   // Check auth method and configuration first
   useEffect(() => {
@@ -86,21 +103,21 @@ export default function TerminalPage() {
     ws.binaryType = 'blob';
 
     ws.onopen = async () => {
-        term.write(`\r\n\x1b[32m${t('terminal.connectedService')}\x1b[0m\r\n`);
+        term.write(`\r\n\x1b[32m${terminalMessagesRef.current.connectedService}\x1b[0m\r\n`);
 
         let privateKey = '';
         if (authMethod === 'key') {
             const encrypted = localStorage.getItem('ssh_private_key_encrypted');
             if (!encrypted) {
-                term.write(`\r\n\x1b[31m${t('terminal.errorKeyNotFound')}\x1b[0m\r\n`);
+                term.write(`\r\n\x1b[31m${terminalMessagesRef.current.errorKeyNotFound}\x1b[0m\r\n`);
                 ws.close();
                 return;
             }
             try {
                 privateKey = await decrypt(encrypted, masterPassword);
-                term.write(`\x1b[32m${t('terminal.keyDecrypted')}\x1b[0m\r\n`);
+                term.write(`\x1b[32m${terminalMessagesRef.current.keyDecrypted}\x1b[0m\r\n`);
             } catch {
-                term.write(`\r\n\x1b[31m${t('terminal.decryptFailed')}\x1b[0m\r\n`);
+                term.write(`\r\n\x1b[31m${terminalMessagesRef.current.decryptFailed}\x1b[0m\r\n`);
                 ws.close();
                 return;
             }
@@ -128,7 +145,7 @@ export default function TerminalPage() {
     };
 
     ws.onclose = () => {
-        term.write(`\r\n\x1b[31m${t('terminal.connectionClosed')}\x1b[0m\r\n`);
+        term.write(`\r\n\x1b[31m${terminalMessagesRef.current.connectionClosed}\x1b[0m\r\n`);
     };
 
     term.onData((data) => {
@@ -151,7 +168,7 @@ export default function TerminalPage() {
       ws.close();
       term.dispose();
     };
-  }, [isUnlocked, isConfigured, authMethod, masterPassword, t]);
+  }, [isUnlocked, isConfigured, authMethod, masterPassword]);
 
   const handleUnlock = (e: React.FormEvent) => {
     e.preventDefault();

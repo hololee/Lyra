@@ -71,3 +71,14 @@ export default defineConfig([
   },
 ])
 ```
+
+## i18n Checks
+
+Run before opening a PR:
+
+```bash
+npm run i18n:scan
+npm run i18n:keys
+npm run lint
+npm run build
+```

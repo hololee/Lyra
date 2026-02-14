@@ -10,7 +10,7 @@ type StatusState = { type: 'idle' | 'loading' | 'success' | 'error'; message?: s
 
 export default function Settings() {
   const { appName, setAppName, faviconDataUrl, setFavicon, isLoading: appLoading } = useApp();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [localAppName, setLocalAppName] = useState(appName);
   const [localFaviconDataUrl, setLocalFaviconDataUrl] = useState(faviconDataUrl);
   const [appNameStatus, setAppNameStatus] = useState<StatusState>({ type: 'idle' });
@@ -342,6 +342,14 @@ export default function Settings() {
   };
 
   const isLoading = appLoading || isSettingsLoading;
+  const handleLanguageChange = (nextLanguage: 'en' | 'ko') => {
+    void i18n.changeLanguage(nextLanguage);
+    try {
+      window.localStorage.setItem('lyra.language', nextLanguage);
+    } catch {
+      // Ignore storage write errors
+    }
+  };
 
   return (
     <div className="p-8 space-y-8 max-w-7xl mx-auto">
@@ -372,6 +380,20 @@ export default function Settings() {
                 />
                 <button type="submit" disabled={isLoading} className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2.5 rounded-lg font-medium flex items-center gap-2"><Save size={18} />{t('actions.save')}</button>
               </div>
+            </div>
+
+            <div>
+              <label htmlFor="settings-language" className="block text-sm font-medium text-gray-300 mb-2">{t('settings.language')}</label>
+              <select
+                id="settings-language"
+                aria-label={t('settings.language')}
+                value={i18n.language}
+                onChange={(e) => handleLanguageChange((e.target.value as 'en' | 'ko'))}
+                className="w-full bg-[#18181b] border border-[#3f3f46] rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500 transition-all"
+              >
+                <option value="en">{t('settings.languageEnglish')}</option>
+                <option value="ko">{t('settings.languageKorean')}</option>
+              </select>
             </div>
 
             <div className="space-y-3 pt-2">

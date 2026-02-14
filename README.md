@@ -81,3 +81,36 @@ docker compose exec backend alembic revision --autogenerate -m "Description of c
 ```bash
 docker compose exec backend alembic upgrade head
 ```
+
+---
+
+## i18n Guide
+
+Frontend supports `en` and `ko` with default language `en`.
+
+- Language selection is persisted in browser storage key `lyra.language`.
+- Common/static page text uses domain keys such as `settings.*`, `templates.*`, `terminal.*`.
+- Toast/error/status/dynamic user messages use `feedback.*`.
+
+### Error Message Policy
+
+- Do not render raw server errors directly.
+- Use i18n fallback formatting for dynamic API errors:
+  - `withApiMessage(t, 'feedback.<domain>.<event>', serverMessage)`
+- If server message is missing, fallback key `feedback.common.unknownError` is used.
+
+### Translation Workflow
+
+1. Add key/value in `frontend/src/i18n/locales/en/common.ts`
+2. Add matching key/value in `frontend/src/i18n/locales/ko/common.ts`
+3. Replace UI string with `t('...')` in page/component code
+4. Run i18n checks + lint/build
+
+### i18n Checks
+
+```bash
+npm --prefix frontend run i18n:scan
+npm --prefix frontend run i18n:keys
+npm --prefix frontend run lint
+npm --prefix frontend run build
+```
