@@ -661,7 +661,7 @@ export default function Provisioning() {
               )}
             </div>
 
-            <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg text-xs text-purple-300">
+            <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg text-xs text-purple-400">
               {t('provisioning.currentSystemUsage', { used: usedGpuCount, total: totalGpus || 0 })}
             </div>
           </section>
