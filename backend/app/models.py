@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, Text, DateTime, ARRAY
+from sqlalchemy import Column, String, Integer, Text, DateTime, ARRAY, Boolean, text
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.sql import func
 from .database import Base
@@ -17,6 +17,8 @@ class Environment(Base):
     ssh_port = Column(Integer, unique=True, nullable=False)
     jupyter_port = Column(Integer, unique=True, nullable=False)
     code_port = Column(Integer, unique=True, nullable=False)
+    enable_jupyter = Column(Boolean, nullable=False, server_default=text("true"))
+    enable_code_server = Column(Boolean, nullable=False, server_default=text("true"))
     mount_config = Column(JSONB, nullable=True)  # List of {host_path, container_path, mode}
     dockerfile_content = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

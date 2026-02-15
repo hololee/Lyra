@@ -21,6 +21,76 @@ CONTAINER_RUN_PORT_RETRIES = 3
 CUSTOM_HOST_PORT_RANGE = (35001, 60000)
 
 
+def _is_enabled(value, default: bool = True) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(value)
+
+
+def _build_ports_config(env, custom_ports: list[dict]) -> dict:
+    ports_config = {"22/tcp": env.ssh_port}
+    if _is_enabled(getattr(env, "enable_jupyter", True)):
+        ports_config["8888/tcp"] = env.jupyter_port
+    if _is_enabled(getattr(env, "enable_code_server", True)):
+        ports_config["8080/tcp"] = env.code_port
+
+    for mapping in custom_ports:
+        container_port = mapping.get("container_port")
+        host_port = mapping.get("host_port")
+        if container_port is None or host_port is None:
+            continue
+        ports_config[f"{int(container_port)}/tcp"] = int(host_port)
+    return ports_config
+
+
+def _build_runtime_command(env) -> str:
+    enable_jupyter = _is_enabled(getattr(env, "enable_jupyter", True))
+    enable_code_server = _is_enabled(getattr(env, "enable_code_server", True))
+
+    script_parts = [
+        "set -euo pipefail",
+        "export DEBIAN_FRONTEND=noninteractive",
+        "dpkg --configure -a || true",
+        "apt-get update",
+        "apt-get install -y --no-install-recommends openssh-server",
+        "mkdir -p /var/run/sshd",
+        f"echo 'root:{env.root_password}' | chpasswd",
+        "grep -q '^PermitRootLogin yes' /etc/ssh/sshd_config || echo 'PermitRootLogin yes' >> /etc/ssh/sshd_config",
+        "/usr/sbin/sshd",
+    ]
+
+    if enable_code_server:
+        script_parts.extend(
+            [
+                "if ! command -v code-server >/dev/null 2>&1; then",
+                "  echo 'code-server enabled but binary not found in image; include managed block or install manually' >&2",
+                "  exit 1",
+                "fi",
+                "code-server --bind-addr 0.0.0.0:8080 --auth none /root >/tmp/code-server.log 2>&1 &",
+            ]
+        )
+
+    if enable_jupyter:
+        script_parts.extend(
+            [
+                "if ! command -v jupyter >/dev/null 2>&1; then",
+                "  echo 'jupyter enabled but jupyterlab not found in image; include managed block or install manually' >&2",
+                "  exit 1",
+                "fi",
+                'exec jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root --ServerApp.token="$JUPYTER_TOKEN" --NotebookApp.token="$JUPYTER_TOKEN"',  # noqa: E501
+            ]
+        )
+    else:
+        script_parts.append("exec tail -f /dev/null")
+
+    script = "\n".join(script_parts).replace('"', '\\"')
+    return f'sh -c "{script}"'
+
+
 def _get_docker_used_ports() -> set[int]:
     used_ports: set[int] = set()
     try:
@@ -183,32 +253,25 @@ def create_environment_task(self, environment_id):
             except Exception:
                 custom_ports = []
 
+        enable_jupyter = _is_enabled(getattr(env, "enable_jupyter", True))
+        enable_code_server = _is_enabled(getattr(env, "enable_code_server", True))
+        print(
+            f"[Task] Service flags: enable_jupyter={enable_jupyter}, "
+            f"enable_code_server={enable_code_server}"
+        )
+
         container_config = {
             "image": image_name,
             "name": f"lyra-{env.name}-{env.id}",  # Ensure unique name
             "detach": True,
-            "environment": {"JUPYTER_TOKEN": jupyter_token},
-            "ports": {'22/tcp': env.ssh_port, '8888/tcp': env.jupyter_port, '8080/tcp': env.code_port},
+            "environment": {
+                "JUPYTER_TOKEN": jupyter_token,
+                "ENABLE_JUPYTER": "1" if enable_jupyter else "0",
+                "ENABLE_CODE_SERVER": "1" if enable_code_server else "0",
+            },
+            "ports": _build_ports_config(env, custom_ports),
             # Keep container running with SSHD
-            # Installing SSH server on the fly for demo purposes (NOT for production)
-            "command": (
-                "sh -c \""
-                "export DEBIAN_FRONTEND=noninteractive && "
-                "dpkg --configure -a || true && "
-                "apt-get update && "
-                "apt-get install -y --no-install-recommends openssh-server python3-pip curl && "
-                "mkdir -p /var/run/sshd && "
-                f"echo 'root:{env.root_password}' | chpasswd && "
-                "grep -q '^PermitRootLogin yes' /etc/ssh/sshd_config || echo 'PermitRootLogin yes' >> /etc/ssh/sshd_config && "  # noqa: E501
-                "python3 -m pip show jupyterlab >/dev/null 2>&1 || python3 -m pip install --no-cache-dir jupyterlab && "
-                "command -v code-server >/dev/null 2>&1 || "
-                "(curl -fsSL https://code-server.dev/install.sh -o /tmp/install-code-server.sh && sh /tmp/install-code-server.sh) && "  # noqa: E501
-                "/usr/sbin/sshd && "
-                "(code-server --bind-addr 0.0.0.0:8080 --auth none /root >/tmp/code-server.log 2>&1 &) && "
-                "python3 -m jupyterlab --ip=0.0.0.0 --port=8888 --no-browser --allow-root "
-                "--ServerApp.token=\"$JUPYTER_TOKEN\" "
-                "--NotebookApp.token=\"$JUPYTER_TOKEN\"\""
-            ),
+            "command": _build_runtime_command(env),
         }
 
         # Add DeviceRequests if GPUs are requested and we are not mocking
@@ -242,14 +305,7 @@ def create_environment_task(self, environment_id):
             container_config['volumes'] = volumes
 
         for attempt in range(CONTAINER_RUN_PORT_RETRIES):
-            ports_config = {'22/tcp': env.ssh_port, '8888/tcp': env.jupyter_port, '8080/tcp': env.code_port}
-            for mapping in custom_ports:
-                container_port = mapping.get("container_port")
-                host_port = mapping.get("host_port")
-                if container_port is None or host_port is None:
-                    continue
-                ports_config[f"{int(container_port)}/tcp"] = int(host_port)
-            container_config["ports"] = ports_config
+            container_config["ports"] = _build_ports_config(env, custom_ports)
             try:
                 client.containers.run(**container_config)
                 break

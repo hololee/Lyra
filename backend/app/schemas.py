@@ -19,6 +19,8 @@ class EnvironmentBase(BaseModel):
     name: str = Field(pattern=r"^[a-zA-Z0-9-]+$")
     container_user: str = "root"
     dockerfile_content: Optional[str] = None
+    enable_jupyter: bool = True
+    enable_code_server: bool = True
     mount_config: List[MountConfig] = []
     custom_ports: List[CustomPortMapping] = []
     gpu_count: int = 0

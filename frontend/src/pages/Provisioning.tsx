@@ -2,7 +2,7 @@ import Editor from '@monaco-editor/react';
 import axios from 'axios';
 import clsx from 'clsx';
 import { Eye, EyeOff, FolderOpen, Play, Plus, Save, Trash2, Upload } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import Modal from '../components/Modal';
@@ -19,6 +19,79 @@ interface CustomPortMapping {
   host_port: number;
   container_port: number;
 }
+
+const MANAGED_JUPYTER_START = '# >>> LYRA_MANAGED_JUPYTER_START';
+const MANAGED_JUPYTER_END = '# <<< LYRA_MANAGED_JUPYTER_END';
+const MANAGED_CODE_START = '# >>> LYRA_MANAGED_CODE_SERVER_START';
+const MANAGED_CODE_END = '# <<< LYRA_MANAGED_CODE_SERVER_END';
+
+const normalizeDockerfile = (text: string): string => {
+  const normalized = text
+    .replace(/\r\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trimEnd();
+  return normalized ? `${normalized}\n` : '';
+};
+
+const stripManagedBlocks = (text: string): string => {
+  if (!text) return '';
+  let next = text;
+  const patterns = [
+    new RegExp(`${MANAGED_JUPYTER_START}[\\s\\S]*?${MANAGED_JUPYTER_END}\\n?`, 'g'),
+    new RegExp(`${MANAGED_CODE_START}[\\s\\S]*?${MANAGED_CODE_END}\\n?`, 'g'),
+  ];
+  for (const pattern of patterns) {
+    next = next.replace(pattern, '');
+  }
+  return normalizeDockerfile(next);
+};
+
+const buildManagedBlocks = (enableJupyter: boolean, enableCodeServer: boolean): string => {
+  const blocks: string[] = [];
+  if (enableJupyter) {
+    blocks.push(
+      `${MANAGED_JUPYTER_START}`,
+      '# Managed by Lyra provisioning service toggle',
+      'RUN if ! command -v python3 >/dev/null 2>&1 || ! python3 -m pip --version >/dev/null 2>&1; then \\',
+      '      (command -v apt-get >/dev/null 2>&1 && apt-get update && apt-get install -y --no-install-recommends python3 python3-pip) || \\',
+      '      (command -v apk >/dev/null 2>&1 && apk add --no-cache python3 py3-pip) || \\',
+      '      (command -v dnf >/dev/null 2>&1 && dnf install -y python3 python3-pip) || \\',
+      '      (command -v yum >/dev/null 2>&1 && yum install -y python3 python3-pip); \\',
+      '    fi && \\',
+      '    if ! command -v python3 >/dev/null 2>&1 || ! python3 -m pip --version >/dev/null 2>&1; then \\',
+      "      echo 'python3/pip are required for jupyterlab installation but were not found after package install attempts' >&2; \\",
+      '      exit 1; \\',
+      '    fi && \\',
+      '    python3 -m pip install --no-cache-dir jupyterlab',
+      `${MANAGED_JUPYTER_END}`
+    );
+  }
+  if (enableCodeServer) {
+    blocks.push(
+      `${MANAGED_CODE_START}`,
+      '# Managed by Lyra provisioning service toggle',
+      'RUN if ! command -v curl >/dev/null 2>&1; then \\',
+      '      (command -v apt-get >/dev/null 2>&1 && apt-get update && apt-get install -y --no-install-recommends curl) || \\',
+      '      (command -v apk >/dev/null 2>&1 && apk add --no-cache curl) || \\',
+      '      (command -v dnf >/dev/null 2>&1 && dnf install -y curl) || \\',
+      '      (command -v yum >/dev/null 2>&1 && yum install -y curl); \\',
+      '    fi && \\',
+      '    curl -fsSL https://code-server.dev/install.sh -o /tmp/install-code-server.sh && \\',
+      '    sh /tmp/install-code-server.sh',
+      `${MANAGED_CODE_END}`
+    );
+  }
+  return blocks.join('\n');
+};
+
+const composeDockerfile = (userDockerfile: string, enableJupyter: boolean, enableCodeServer: boolean): string => {
+  const userPart = stripManagedBlocks(userDockerfile).trimEnd();
+  const managedPart = buildManagedBlocks(enableJupyter, enableCodeServer);
+  if (!managedPart) {
+    return `${userPart}\n`;
+  }
+  return `${userPart}\n\n${managedPart}\n`;
+};
 
 export default function Provisioning() {
   const navigate = useNavigate();
@@ -54,7 +127,9 @@ export default function Provisioning() {
   const [mounts, setMounts] = useState<MountPoint[]>([]);
   const [customPorts, setCustomPorts] = useState<CustomPortMapping[]>([]);
   const [isAllocatingPort, setIsAllocatingPort] = useState(false);
-  const [dockerfile, setDockerfile] = useState('FROM python:3.11-slim\n\n');
+  const [userDockerfile, setUserDockerfile] = useState('FROM python:3.11-slim\n');
+  const [enableJupyter, setEnableJupyter] = useState(true);
+  const [enableCodeServer, setEnableCodeServer] = useState(true);
 
   // Fetch GPU Resources and Load Template
   useEffect(() => {
@@ -72,7 +147,7 @@ export default function Provisioning() {
 
              // Only load Dockerfile content
              if (config.dockerfile_content) {
-               setDockerfile(config.dockerfile_content);
+               setUserDockerfile(normalizeDockerfile(stripManagedBlocks(config.dockerfile_content)));
                setErrors((prev) => ({ ...prev, dockerfile: undefined }));
              }
 
@@ -130,6 +205,15 @@ export default function Provisioning() {
     setCustomPorts((prev) => prev.filter((_, i) => i !== index));
   };
 
+  const renderedDockerfile = useMemo(
+    () => composeDockerfile(userDockerfile, enableJupyter, enableCodeServer),
+    [userDockerfile, enableJupyter, enableCodeServer]
+  );
+  const managedBlocksText = useMemo(
+    () => normalizeDockerfile(buildManagedBlocks(enableJupyter, enableCodeServer)),
+    [enableJupyter, enableCodeServer]
+  );
+
   // Error State
   const [errors, setErrors] = useState<{name?: string, password?: string, dockerfile?: string}>({});
 
@@ -141,7 +225,7 @@ export default function Provisioning() {
         newErrors.name = t('provisioning.errorEnvironmentNameFormat');
     }
     if (!password.trim()) newErrors.password = t('provisioning.errorRootPasswordRequired');
-    if (!dockerfile.trim()) newErrors.dockerfile = t('provisioning.errorDockerfileRequired');
+    if (!userDockerfile.trim()) newErrors.dockerfile = t('provisioning.errorDockerfileRequired');
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
@@ -160,7 +244,9 @@ export default function Provisioning() {
         root_password: password,
         mount_config: validMounts,
         custom_ports: customPorts,
-        dockerfile_content: dockerfile,
+        dockerfile_content: renderedDockerfile,
+        enable_jupyter: enableJupyter,
+        enable_code_server: enableCodeServer,
         gpu_count: gpuCount
       };
 
@@ -188,9 +274,11 @@ export default function Provisioning() {
       setTemplateErrors({});
 
       try {
+          const templateDockerfile = normalizeDockerfile(userDockerfile);
+
           // Only save Dockerfile content as requested
           const config = {
-              dockerfile_content: dockerfile
+              dockerfile_content: templateDockerfile
           };
 
           await axios.post('templates/', {
@@ -424,6 +512,34 @@ export default function Provisioning() {
             </div>
           </section>
 
+          <section className="bg-[var(--bg-elevated)] p-6 rounded-xl border border-[var(--border)] space-y-4">
+            <h3 className="text-lg font-semibold text-[var(--text)] flex items-center gap-2">
+              <span className="w-1 h-5 bg-indigo-500 rounded-full"></span>
+              {t('provisioning.optionalServices')}
+            </h3>
+            <p className="text-xs text-[var(--text-muted)]">{t('provisioning.optionalServicesDescription')}</p>
+            <div className="space-y-3">
+              <label className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--bg-soft)] px-3 py-2.5 cursor-pointer">
+                <span className="text-sm text-[var(--text)]">{t('provisioning.enableJupyter')}</span>
+                <input
+                  type="checkbox"
+                  checked={enableJupyter}
+                  onChange={(e) => setEnableJupyter(e.target.checked)}
+                  className="h-4 w-4 rounded border-[var(--border)] bg-[var(--bg-elevated)] text-blue-600 focus:ring-blue-500"
+                />
+              </label>
+              <label className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--bg-soft)] px-3 py-2.5 cursor-pointer">
+                <span className="text-sm text-[var(--text)]">{t('provisioning.enableCodeServer')}</span>
+                <input
+                  type="checkbox"
+                  checked={enableCodeServer}
+                  onChange={(e) => setEnableCodeServer(e.target.checked)}
+                  className="h-4 w-4 rounded border-[var(--border)] bg-[var(--bg-elevated)] text-blue-600 focus:ring-blue-500"
+                />
+              </label>
+            </div>
+          </section>
+
           {/* Storage */}
           <section className="bg-[var(--bg-elevated)] p-6 rounded-xl border border-[var(--border)] space-y-4">
             <div className="flex justify-between items-center">
@@ -549,7 +665,6 @@ export default function Provisioning() {
                     <div className="p-1.5 bg-blue-500/10 rounded-md">
                         <span className="text-blue-400 font-mono text-sm font-bold">{t('provisioning.dockerfile')}</span>
                     </div>
-                    <span className="text-sm text-[var(--text-muted)]">{t('provisioning.buildConfiguration')}</span>
                 </div>
                 <div className="flex gap-2">
                     <button
@@ -573,19 +688,21 @@ export default function Provisioning() {
                  <p className="text-xs text-red-400">{errors.dockerfile}</p>
                </div>
              )}
-             <div className="flex-1 relative">
+             <div className="flex-1 min-h-0 relative">
                 <Editor
                     height="100%"
                     defaultLanguage="dockerfile"
                     theme={resolvedTheme === 'dark' ? 'vs-dark' : 'vs'}
-                    value={dockerfile}
+                    value={userDockerfile}
                     onChange={(value) => {
-                      setDockerfile(value || '');
-                      if (errors.dockerfile && (value || '').trim()) {
+                      const normalized = normalizeDockerfile(value || '');
+                      setUserDockerfile(normalized);
+                      if (errors.dockerfile && normalized.trim()) {
                         setErrors((prev) => ({ ...prev, dockerfile: undefined }));
                       }
                     }}
                     options={{
+                        automaticLayout: true,
                         minimap: { enabled: false },
                         fontSize: 14,
                         scrollBeyondLastLine: false,
@@ -597,6 +714,36 @@ export default function Provisioning() {
                     }}
                 />
              </div>
+             {managedBlocksText.trim() && (
+               <div className="border-t border-[var(--border)] bg-[var(--bg-soft)]">
+                 <div className="px-6 py-3 text-xs font-semibold tracking-wide text-[var(--text-muted)] uppercase">
+                   {t('provisioning.managedServiceBlocks')}
+                 </div>
+                 <div className="h-64 border-t border-[var(--border)]">
+                   <Editor
+                     height="100%"
+                     defaultLanguage="dockerfile"
+                     theme={resolvedTheme === 'dark' ? 'vs-dark' : 'vs'}
+                     value={managedBlocksText}
+                     options={{
+                       automaticLayout: true,
+                       readOnly: true,
+                       domReadOnly: true,
+                       minimap: { enabled: false },
+                       fontSize: 13,
+                       lineNumbers: 'on',
+                       scrollBeyondLastLine: false,
+                       scrollbar: {
+                         alwaysConsumeMouseWheel: false,
+                       },
+                       renderLineHighlight: 'none',
+                       padding: { top: 12, bottom: 12 },
+                       fontFamily: "'JetBrains Mono', 'Fira Code', monospace"
+                     }}
+                   />
+                 </div>
+               </div>
+             )}
         </div>
       </div>
 
@@ -635,7 +782,7 @@ export default function Provisioning() {
                                 <button
                                     onClick={() => {
                                         if (template.config.dockerfile_content) {
-                                            setDockerfile(template.config.dockerfile_content);
+                                            setUserDockerfile(normalizeDockerfile(stripManagedBlocks(template.config.dockerfile_content)));
                                             setErrors((prev) => ({ ...prev, dockerfile: undefined }));
                                             setIsLoadModalOpen(false);
                                             showToast(t('feedback.provisioning.templateLoaded'), "success");
