@@ -849,9 +849,9 @@ export default function Provisioning() {
                     theme={resolvedTheme === 'dark' ? 'vs-dark' : 'vs'}
                     value={userDockerfile}
                     onChange={(value) => {
-                      const normalized = normalizeDockerfile(value || '');
-                      setUserDockerfile(normalized);
-                      if (errors.dockerfile && normalized.trim()) {
+                      const nextValue = value ?? '';
+                      setUserDockerfile(nextValue);
+                      if (errors.dockerfile && nextValue.trim()) {
                         setErrors((prev) => ({ ...prev, dockerfile: undefined }));
                       }
                     }}
