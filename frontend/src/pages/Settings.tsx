@@ -1,13 +1,14 @@
 import axios from 'axios';
-import { AlertCircle, CheckCircle2, FolderOpen, HardDrive, ImageIcon, Key, Lock, PencilLine, RefreshCw, Save, Server, Trash2, X } from 'lucide-react';
+import { AlertCircle, CheckCircle2, FolderOpen, ImageIcon, Key, Lock, PencilLine, RefreshCw, Save, Server, Trash2, X } from 'lucide-react';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useApp } from '../context/AppContext';
 import { useTheme } from '../context/ThemeContext';
 import { withApiMessage } from '../utils/i18nMessage';
-import { encrypt } from '../utils/crypto';
+import { decrypt, encrypt } from '../utils/crypto';
 
 type StatusState = { type: 'idle' | 'loading' | 'success' | 'error'; message?: string };
+type TmuxSession = { name: string; attached: number; windows: number };
 
 export default function Settings() {
   const {
@@ -28,6 +29,7 @@ export default function Settings() {
   const [announcementStatus, setAnnouncementStatus] = useState<StatusState>({ type: 'idle' });
   const [sshStatus, setSshStatus] = useState<StatusState>({ type: 'idle' });
   const [resourceStatus, setResourceStatus] = useState<StatusState>({ type: 'idle' });
+  const [sessionStatus, setSessionStatus] = useState<StatusState>({ type: 'idle' });
   const [announcementEditorOpen, setAnnouncementEditorOpen] = useState(false);
   const [announcementDraft, setAnnouncementDraft] = useState('');
 
@@ -48,6 +50,9 @@ export default function Settings() {
   const [unusedVolumes, setUnusedVolumes] = useState<Array<{ name: string; mountpoint: string; driver: string }>>([]);
   const [selectedVolumes, setSelectedVolumes] = useState<string[]>([]);
   const [buildCache, setBuildCache] = useState<{ count: number; size: number }>({ count: 0, size: 0 });
+  const [tmuxSessions, setTmuxSessions] = useState<TmuxSession[]>([]);
+  const [selectedTmuxSessions, setSelectedTmuxSessions] = useState<string[]>([]);
+  const [tmuxLoading, setTmuxLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const faviconInputRef = useRef<HTMLInputElement>(null);
 
@@ -308,6 +313,100 @@ export default function Settings() {
     }
   };
 
+  const resolvePrivateKeyForTmuxOps = async (): Promise<string | undefined> => {
+    if (sshSettings.authMethod !== 'key') return undefined;
+    if (sshSettings.privateKey) return sshSettings.privateKey;
+
+    const encrypted = localStorage.getItem('ssh_private_key_encrypted');
+    if (!encrypted) {
+      throw new Error(t('feedback.settings.tmuxKeyMissing'));
+    }
+    if (!sshSettings.masterPassword) {
+      throw new Error(t('feedback.settings.tmuxMasterPassphraseRequired'));
+    }
+    try {
+      return await decrypt(encrypted, sshSettings.masterPassword);
+    } catch {
+      throw new Error(t('feedback.settings.tmuxKeyDecryptFailed'));
+    }
+  };
+
+  const loadTmuxSessions = async () => {
+    try {
+      setTmuxLoading(true);
+      setSessionStatus({ type: 'loading', message: t('feedback.settings.tmuxSessionsLoading') });
+      const privateKey = await resolvePrivateKeyForTmuxOps();
+      const res = await axios.post('terminal/tmux/sessions/list', {
+        privateKey,
+      });
+      if (res.data?.status !== 'success') {
+        setSessionStatus({
+          type: 'error',
+          message: withApiMessage(t, 'feedback.settings.tmuxSessionsLoadFailed', res.data?.message || ''),
+        });
+        return;
+      }
+      if (!res.data.installed) {
+        setTmuxSessions([]);
+        setSelectedTmuxSessions([]);
+        setSessionStatus({ type: 'error', message: t('feedback.settings.tmuxNotInstalled') });
+        return;
+      }
+      const sessions = (res.data.sessions || []) as TmuxSession[];
+      setTmuxSessions(sessions);
+      setSelectedTmuxSessions((prev) => prev.filter((name) => sessions.some((s) => s.name === name)));
+      setSessionStatus({
+        type: 'success',
+        message: t('feedback.settings.tmuxSessionsLoaded', { count: sessions.length }),
+      });
+      setTimeout(() => setSessionStatus({ type: 'idle' }), 3000);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      setSessionStatus({ type: 'error', message: withApiMessage(t, 'feedback.settings.tmuxSessionsLoadFailed', message) });
+    } finally {
+      setTmuxLoading(false);
+    }
+  };
+
+  const killSelectedTmuxSessions = async () => {
+    if (selectedTmuxSessions.length === 0) {
+      setSessionStatus({ type: 'error', message: t('feedback.settings.tmuxSelectSessionRequired') });
+      return;
+    }
+
+    try {
+      setTmuxLoading(true);
+      setSessionStatus({ type: 'loading', message: t('feedback.settings.tmuxSessionsKilling') });
+      const privateKey = await resolvePrivateKeyForTmuxOps();
+      const res = await axios.post('terminal/tmux/sessions/kill', {
+        privateKey,
+        session_names: selectedTmuxSessions,
+      });
+      if (res.data?.status !== 'success') {
+        setSessionStatus({
+          type: 'error',
+          message: withApiMessage(t, 'feedback.settings.tmuxSessionsKillFailed', res.data?.message || ''),
+        });
+        return;
+      }
+      setSessionStatus({
+        type: 'success',
+        message: t('feedback.settings.tmuxSessionsKillResult', {
+          removed: Number(res.data?.removed_count || 0),
+          skipped: Number(res.data?.skipped_count || 0),
+        }),
+      });
+      setSelectedTmuxSessions([]);
+      await loadTmuxSessions();
+      setTimeout(() => setSessionStatus({ type: 'idle' }), 3000);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      setSessionStatus({ type: 'error', message: withApiMessage(t, 'feedback.settings.tmuxSessionsKillFailed', message) });
+    } finally {
+      setTmuxLoading(false);
+    }
+  };
+
   const formatBytes = (bytes: number) => {
     if (bytes <= 0) return '0 B';
     const units = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -377,6 +476,12 @@ export default function Settings() {
   };
 
   const isLoading = appLoading || isSettingsLoading;
+  const refreshResourceManagement = async () => {
+    await Promise.allSettled([
+      loadResourceData(imageMode),
+      loadTmuxSessions(),
+    ]);
+  };
   const handleLanguageChange = (nextLanguage: 'en' | 'ko') => {
     void i18n.changeLanguage(nextLanguage);
     try {
@@ -624,7 +729,7 @@ export default function Settings() {
         <section className={sectionClass}>
           <div className={sectionHeaderClass}>
             <h3 className="text-xl font-semibold text-[var(--text)] flex items-center gap-2">
-              <Server size={20} className="text-blue-400" /> {t('settings.hostServerTitle')}
+              {t('settings.hostServerTitle')}
             </h3>
             <p className="text-sm text-[var(--text-muted)] mt-1">{t('settings.hostServerDescription')}</p>
           </div>
@@ -712,6 +817,7 @@ export default function Settings() {
                 </button>
               </div>
             </div>
+
           </form>
         </section>
       </div>
@@ -726,10 +832,12 @@ export default function Settings() {
           </div>
           <button
             type="button"
-            onClick={() => loadResourceData(imageMode)}
+            onClick={() => {
+              void refreshResourceManagement();
+            }}
             className={`${secondaryButtonClass} self-start sm:self-auto px-3 py-2 flex items-center gap-2`}
           >
-            <RefreshCw size={14} className={isResourceLoading ? 'animate-spin' : ''} />
+            <RefreshCw size={14} className={isResourceLoading || tmuxLoading ? 'animate-spin' : ''} />
             {t('actions.refresh')}
           </button>
         </div>
@@ -767,7 +875,7 @@ export default function Settings() {
 
           <div className={resourceCardClass}>
             <div className="flex items-center justify-between">
-              <h4 className="text-[var(--text)] font-medium flex items-center gap-2"><HardDrive size={15} /> {t('settings.unusedVolumes')}</h4>
+              <h4 className="text-[var(--text)] font-medium">{t('settings.unusedVolumes')}</h4>
               <span className="text-xs text-[var(--text-muted)]">{t('settings.candidates', { count: unusedVolumes.length })}</span>
             </div>
             <div className="max-h-40 overflow-y-auto space-y-2 pr-1">
@@ -803,6 +911,64 @@ export default function Settings() {
             <button type="button" onClick={runBuildCachePrune} className={dangerButtonClass}>
               {t('resource.cleanupBuildCache')}
             </button>
+          </div>
+
+          <div className={resourceCardClass}>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h4 className="text-[var(--text)] font-medium">{t('settings.terminalSessionsTitle')}</h4>
+                <p className="text-xs text-[var(--text-muted)] mt-1">{t('settings.terminalSessionsDescription')}</p>
+              </div>
+            </div>
+
+            <div className="max-h-44 overflow-y-auto space-y-2 pr-1">
+              {tmuxSessions.length === 0 ? (
+                <p className="text-xs text-[var(--text-muted)]">{t('settings.noTerminalSessions')}</p>
+              ) : tmuxSessions.map((session) => (
+                <label key={session.name} className="flex items-center gap-2 text-xs border border-[var(--border)] rounded-lg p-2 text-[var(--text)] cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={selectedTmuxSessions.includes(session.name)}
+                    onChange={(e) => {
+                      if (e.target.checked) setSelectedTmuxSessions((prev) => [...prev, session.name]);
+                      else setSelectedTmuxSessions((prev) => prev.filter((name) => name !== session.name));
+                    }}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="font-mono text-[11px] text-[var(--text)] break-all">{session.name}</div>
+                    <div className="text-[var(--text-muted)]">
+                      {t('settings.terminalSessionMeta', { attached: session.attached, windows: session.windows })}
+                    </div>
+                  </div>
+                </label>
+              ))}
+            </div>
+
+            <button
+              type="button"
+              onClick={killSelectedTmuxSessions}
+              className={dangerButtonClass}
+              disabled={tmuxLoading || selectedTmuxSessions.length === 0}
+            >
+              {t('settings.killSelectedTerminalSessions')}
+            </button>
+
+            {sessionStatus.message && (
+              <div className={`flex items-center gap-2 text-sm p-3 rounded-lg border ${
+                sessionStatus.type === 'success'
+                  ? 'text-green-400 bg-green-500/5 border-green-500/20'
+                  : sessionStatus.type === 'loading'
+                    ? 'text-blue-400 bg-blue-500/5 border-blue-500/20'
+                    : 'text-red-400 bg-red-500/5 border-red-500/20'
+              }`}>
+                {sessionStatus.type === 'success'
+                  ? <CheckCircle2 size={18} className="shrink-0" />
+                  : sessionStatus.type === 'loading'
+                    ? <RefreshCw size={18} className="shrink-0 animate-spin" />
+                    : <AlertCircle size={18} className="shrink-0" />}
+                <span className="font-medium">{sessionStatus.message}</span>
+              </div>
+            )}
           </div>
 
         </div>
