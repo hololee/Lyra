@@ -24,6 +24,8 @@ const MANAGED_JUPYTER_START = '# >>> LYRA_MANAGED_JUPYTER_START';
 const MANAGED_JUPYTER_END = '# <<< LYRA_MANAGED_JUPYTER_END';
 const MANAGED_CODE_START = '# >>> LYRA_MANAGED_CODE_SERVER_START';
 const MANAGED_CODE_END = '# <<< LYRA_MANAGED_CODE_SERVER_END';
+const MANAGED_SSH_START = '# >>> LYRA_MANAGED_SSH_START';
+const MANAGED_SSH_END = '# <<< LYRA_MANAGED_SSH_END';
 
 const normalizeDockerfile = (text: string): string => {
   const normalized = text
@@ -37,6 +39,7 @@ const stripManagedBlocks = (text: string): string => {
   if (!text) return '';
   let next = text;
   const patterns = [
+    new RegExp(`${MANAGED_SSH_START}[\\s\\S]*?${MANAGED_SSH_END}\\n?`, 'g'),
     new RegExp(`${MANAGED_JUPYTER_START}[\\s\\S]*?${MANAGED_JUPYTER_END}\\n?`, 'g'),
     new RegExp(`${MANAGED_CODE_START}[\\s\\S]*?${MANAGED_CODE_END}\\n?`, 'g'),
   ];
@@ -47,7 +50,24 @@ const stripManagedBlocks = (text: string): string => {
 };
 
 const buildManagedBlocks = (enableJupyter: boolean, enableCodeServer: boolean): string => {
-  const blocks: string[] = [];
+  const blocks: string[] = [
+    `${MANAGED_SSH_START}`,
+    '# Managed by Lyra provisioning runtime requirements',
+    'RUN if ! command -v sshd >/dev/null 2>&1 && [ ! -x /usr/sbin/sshd ]; then \\',
+    '      (command -v apt-get >/dev/null 2>&1 && apt-get update && apt-get install -y --no-install-recommends openssh-server passwd) || \\',
+    '      (command -v apk >/dev/null 2>&1 && apk add --no-cache openssh shadow) || \\',
+    '      (command -v dnf >/dev/null 2>&1 && dnf install -y openssh-server shadow-utils) || \\',
+    '      (command -v yum >/dev/null 2>&1 && yum install -y openssh-server shadow-utils); \\',
+    '    fi && \\',
+    '    if ! command -v chpasswd >/dev/null 2>&1; then \\',
+    '      (command -v apt-get >/dev/null 2>&1 && apt-get update && apt-get install -y --no-install-recommends passwd) || \\',
+    '      (command -v apk >/dev/null 2>&1 && apk add --no-cache shadow) || \\',
+    '      (command -v dnf >/dev/null 2>&1 && dnf install -y shadow-utils) || \\',
+    '      (command -v yum >/dev/null 2>&1 && yum install -y shadow-utils); \\',
+    '    fi && \\',
+    '    mkdir -p /var/run/sshd /etc/ssh',
+    `${MANAGED_SSH_END}`,
+  ];
   if (enableJupyter) {
     blocks.push(
       `${MANAGED_JUPYTER_START}`,

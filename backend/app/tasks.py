@@ -53,7 +53,7 @@ def _run_image_probe(client, image_name: str, probe_command: str) -> tuple[bool,
     try:
         client.containers.run(
             image_name,
-            probe_command,
+            [probe_command],
             entrypoint=["sh", "-lc"],
             remove=True,
             stdout=True,
@@ -82,10 +82,14 @@ def _validate_runtime_prerequisites(
     ok, detail = _run_image_probe(
         client,
         image_name,
-        "command -v sshd >/dev/null 2>&1 && command -v chpasswd >/dev/null 2>&1",
+        "if command -v sshd >/dev/null 2>&1; then :; elif [ -x /usr/sbin/sshd ]; then :; else exit 1; fi; command -v chpasswd >/dev/null 2>&1",  # noqa: E501
     )
     if not ok:
-        ok_sshd, _ = _run_image_probe(client, image_name, "command -v sshd >/dev/null 2>&1")
+        ok_sshd, _ = _run_image_probe(
+            client,
+            image_name,
+            "command -v sshd >/dev/null 2>&1 || [ -x /usr/sbin/sshd ]",
+        )
         if not ok_sshd:
             suffix = f" ({detail})" if detail else ""
             return f"missing_prerequisite:sshd sshd binary must exist in the image{suffix}"
@@ -130,7 +134,10 @@ def _build_runtime_command(jupyter_mode: Optional[str], enable_jupyter: bool, en
         'echo "root:${ROOT_PASSWORD}" | chpasswd',
         "unset ROOT_PASSWORD",
         "grep -q '^PermitRootLogin yes' /etc/ssh/sshd_config || echo 'PermitRootLogin yes' >> /etc/ssh/sshd_config",
-        "sshd",
+        'SSHD_BIN="$(command -v sshd || true)"',
+        'if [ -z "$SSHD_BIN" ] && [ -x /usr/sbin/sshd ]; then SSHD_BIN="/usr/sbin/sshd"; fi',
+        'if [ -z "$SSHD_BIN" ]; then echo "sshd binary not found" >&2; exit 1; fi',
+        '"$SSHD_BIN"',
     ]
 
     if enable_code_server:
@@ -320,10 +327,7 @@ def create_environment_task(self, environment_id):
 
         enable_jupyter = _is_enabled(getattr(env, "enable_jupyter", True))
         enable_code_server = _is_enabled(getattr(env, "enable_code_server", True))
-        print(
-            f"[Task] Service flags: enable_jupyter={enable_jupyter}, "
-            f"enable_code_server={enable_code_server}"
-        )
+        print(f"[Task] Service flags: enable_jupyter={enable_jupyter}, " f"enable_code_server={enable_code_server}")
 
         if not env.root_password_encrypted:
             env.status = "error"
