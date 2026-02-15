@@ -52,7 +52,17 @@ const buildManagedBlocks = (enableJupyter: boolean, enableCodeServer: boolean): 
     blocks.push(
       `${MANAGED_JUPYTER_START}`,
       '# Managed by Lyra provisioning service toggle',
-      'RUN python3 -m pip install --no-cache-dir jupyterlab',
+      'RUN if ! command -v python3 >/dev/null 2>&1 || ! python3 -m pip --version >/dev/null 2>&1; then \\',
+      '      (command -v apt-get >/dev/null 2>&1 && apt-get update && apt-get install -y --no-install-recommends python3 python3-pip) || \\',
+      '      (command -v apk >/dev/null 2>&1 && apk add --no-cache python3 py3-pip) || \\',
+      '      (command -v dnf >/dev/null 2>&1 && dnf install -y python3 python3-pip) || \\',
+      '      (command -v yum >/dev/null 2>&1 && yum install -y python3 python3-pip); \\',
+      '    fi && \\',
+      '    if ! command -v python3 >/dev/null 2>&1 || ! python3 -m pip --version >/dev/null 2>&1; then \\',
+      "      echo 'python3/pip are required for jupyterlab installation but were not found after package install attempts' >&2; \\",
+      '      exit 1; \\',
+      '    fi && \\',
+      '    python3 -m pip install --no-cache-dir jupyterlab',
       `${MANAGED_JUPYTER_END}`
     );
   }
