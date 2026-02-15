@@ -8,6 +8,7 @@ from ..models import Setting
 import json
 from pydantic import BaseModel
 from typing import Optional
+import re
 from ..core.ssh_policy import connect_ssh, map_ssh_error
 
 
@@ -28,6 +29,15 @@ class SshTestRequest(BaseModel):
     password: Optional[str] = None
     privateKey: Optional[str] = None
     hostFingerprint: Optional[str] = None
+
+
+class TmuxSessionListRequest(BaseModel):
+    privateKey: Optional[str] = None
+
+
+class TmuxSessionKillRequest(BaseModel):
+    privateKey: Optional[str] = None
+    session_names: list[str]
 
 
 @router.post("/test-ssh")
@@ -62,6 +72,196 @@ async def _send_ws_error(websocket: WebSocket, code: str, message: str):
     await websocket.send_text(json.dumps({"type": "error", "code": code, "message": message}))
 
 
+def _sanitize_session_key(raw: Optional[str]) -> Optional[str]:
+    if not raw:
+        return None
+    cleaned = re.sub(r"[^a-zA-Z0-9_-]", "_", raw)[:64]
+    return cleaned or None
+
+
+def _sanitize_tmux_session_name(raw: str) -> Optional[str]:
+    value = (raw or "").strip()
+    if not value:
+        return None
+    if len(value) > 128:
+        return None
+    if not re.fullmatch(r"[A-Za-z0-9_.:-]+", value):
+        return None
+    return value
+
+
+async def _connect_terminal_ssh(db: AsyncSession, private_key: Optional[str] = None):
+    ssh_host = await get_setting_value(db, "ssh_host")
+    ssh_port_str = await get_setting_value(db, "ssh_port", "22")
+    ssh_port = int(ssh_port_str) if ssh_port_str.isdigit() else 22
+    ssh_user = await get_setting_value(db, "ssh_username")
+    ssh_auth_method = await get_setting_value(db, "ssh_auth_method", "password")
+    ssh_password = await get_setting_value(db, "ssh_password")
+    ssh_host_fingerprint = await get_setting_value(db, "ssh_host_fingerprint")
+
+    if not ssh_host or not ssh_user:
+        raise ValueError("ssh_host_not_configured")
+
+    return connect_ssh(
+        host=ssh_host,
+        port=ssh_port,
+        username=ssh_user,
+        auth_method=ssh_auth_method,
+        password=ssh_password,
+        private_key=private_key,
+        host_fingerprint=ssh_host_fingerprint,
+        timeout=10,
+    )
+
+
+def _exec_ssh_command(ssh_client, command: str, timeout: int = 20):
+    stdin, stdout, stderr = ssh_client.exec_command(command, timeout=timeout)
+    exit_code = stdout.channel.recv_exit_status()
+    out = stdout.read().decode("utf-8", errors="ignore")
+    err = stderr.read().decode("utf-8", errors="ignore")
+    return exit_code, out.strip(), err.strip()
+
+
+_TMUX_BIN_SNIPPET = (
+    "TMUX_BIN=\"\"; "
+    "if command -v bash >/dev/null 2>&1; then "
+    "TMUX_BIN=\"$(bash -lc 'command -v tmux' 2>/dev/null | head -n1)\"; "
+    "fi; "
+    "if [ -z \"$TMUX_BIN\" ]; then TMUX_BIN=\"$(command -v tmux 2>/dev/null || true)\"; fi; "
+    "if [ -z \"$TMUX_BIN\" ] && [ -x /usr/bin/tmux ]; then TMUX_BIN=/usr/bin/tmux; fi; "
+    "if [ -z \"$TMUX_BIN\" ] && [ -x /usr/local/bin/tmux ]; then TMUX_BIN=/usr/local/bin/tmux; fi; "
+    "if [ -z \"$TMUX_BIN\" ] && [ -x /bin/tmux ]; then TMUX_BIN=/bin/tmux; fi; "
+    "if [ -z \"$TMUX_BIN\" ] && [ -x /opt/homebrew/bin/tmux ]; then TMUX_BIN=/opt/homebrew/bin/tmux; fi; "
+    "if [ -z \"$TMUX_BIN\" ] && [ -x /snap/bin/tmux ]; then TMUX_BIN=/snap/bin/tmux; fi; "
+)
+
+
+@router.post("/tmux/sessions/list")
+async def list_tmux_sessions(req: TmuxSessionListRequest, db: AsyncSession = Depends(get_db)):
+    ssh_client = None
+    try:
+        ssh_client = await _connect_terminal_ssh(db, req.privateKey)
+        cmd = (
+            f"{_TMUX_BIN_SNIPPET}"
+            "if [ -z \"$TMUX_BIN\" ]; then echo __NO_TMUX__; exit 0; fi; "
+            "$TMUX_BIN list-sessions -F '#{session_name}\\t#{session_attached}\\t#{session_windows}' 2>/dev/null || true; "
+            "echo __FALLBACK__; "
+            "$TMUX_BIN ls 2>/dev/null || true"
+        )
+        _, out, _ = _exec_ssh_command(ssh_client, cmd, timeout=20)
+        if "__NO_TMUX__" in out:
+            return {"status": "success", "installed": False, "sessions": []}
+
+        lines = out.splitlines()
+        fallback_index = next((idx for idx, line in enumerate(lines) if line.strip() == "__FALLBACK__"), -1)
+        formatted_lines = lines[:fallback_index] if fallback_index >= 0 else lines
+        fallback_lines = lines[fallback_index + 1 :] if fallback_index >= 0 else []
+
+        sessions_by_name: dict[str, dict] = {}
+        for line in formatted_lines:
+            line = line.strip()
+            if not line:
+                continue
+            # Some tmux versions/shell contexts can return literal "\t"
+            # instead of an actual tab character in formatted output.
+            normalized_line = line.replace("\\t", "\t")
+            parts = normalized_line.split("\t")
+            if len(parts) < 1:
+                continue
+            name = _sanitize_tmux_session_name(parts[0]) or parts[0]
+            attached = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 0
+            windows = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 0
+            sessions_by_name[name] = {"name": name, "attached": attached, "windows": windows}
+
+        # Fallback for older tmux output style:
+        # "<name>: <n> windows (created ...)"
+        for line in fallback_lines:
+            line = line.strip()
+            if not line:
+                continue
+            if ":" not in line:
+                continue
+            raw_name = line.split(":", 1)[0].strip()
+            name = _sanitize_tmux_session_name(raw_name)
+            if not name:
+                continue
+            if name in sessions_by_name:
+                continue
+            windows = 0
+            match = re.search(r":\s*(\d+)\s+windows?", line)
+            if match:
+                try:
+                    windows = int(match.group(1))
+                except Exception:
+                    windows = 0
+            sessions_by_name[name] = {"name": name, "attached": 0, "windows": windows}
+
+        sessions = sorted(sessions_by_name.values(), key=lambda item: item["name"])
+        return {"status": "success", "installed": True, "sessions": sessions}
+    except ValueError:
+        return {"status": "error", "code": "ssh_host_not_configured", "message": "Host server is not configured."}
+    except Exception as e:
+        code, message = map_ssh_error(e)
+        return {"status": "error", "code": code, "message": message}
+    finally:
+        if ssh_client:
+            ssh_client.close()
+
+
+@router.post("/tmux/sessions/kill")
+async def kill_tmux_sessions(req: TmuxSessionKillRequest, db: AsyncSession = Depends(get_db)):
+    targets = []
+    for name in req.session_names:
+        safe = _sanitize_tmux_session_name(name)
+        if safe:
+            targets.append(safe)
+
+    if not targets:
+        return {"status": "error", "code": "tmux_session_invalid", "message": "No valid session names were provided."}
+
+    ssh_client = None
+    try:
+        ssh_client = await _connect_terminal_ssh(db, req.privateKey)
+        check_cmd = f"{_TMUX_BIN_SNIPPET}if [ -z \"$TMUX_BIN\" ]; then echo __NO_TMUX__; fi"
+        _, check_out, _ = _exec_ssh_command(ssh_client, check_cmd, timeout=10)
+        if "__NO_TMUX__" in check_out:
+            return {"status": "error", "code": "tmux_not_installed", "message": "tmux is not installed on host."}
+
+        removed = []
+        skipped = []
+        for session_name in targets:
+            code, out, err = _exec_ssh_command(
+                ssh_client,
+                f"{_TMUX_BIN_SNIPPET}if [ -z \"$TMUX_BIN\" ]; then echo __NO_TMUX__; exit 1; fi; $TMUX_BIN kill-session -t '{session_name}'",  # noqa: E501
+                timeout=10,
+            )
+            if code == 0:
+                removed.append(session_name)
+            else:
+                skipped.append(
+                    {
+                        "name": session_name,
+                        "reason": err or out or "kill failed",
+                    }
+                )
+
+        return {
+            "status": "success",
+            "removed_count": len(removed),
+            "skipped_count": len(skipped),
+            "removed": removed,
+            "skipped": skipped,
+        }
+    except ValueError:
+        return {"status": "error", "code": "ssh_host_not_configured", "message": "Host server is not configured."}
+    except Exception as e:
+        code, message = map_ssh_error(e)
+        return {"status": "error", "code": code, "message": message}
+    finally:
+        if ssh_client:
+            ssh_client.close()
+
+
 @router.websocket("/ws")
 async def websocket_terminal(websocket: WebSocket, db: AsyncSession = Depends(get_db)):
     await websocket.accept()
@@ -87,6 +287,7 @@ async def websocket_terminal(websocket: WebSocket, db: AsyncSession = Depends(ge
             return
 
         ssh_key = init_data.get("privateKey")
+        session_key = _sanitize_session_key(init_data.get("sessionKey"))
         cols = init_data.get("cols", 80)
         rows = init_data.get("rows", 24)
 
@@ -110,6 +311,12 @@ async def websocket_terminal(websocket: WebSocket, db: AsyncSession = Depends(ge
                 chan = ssh_client.invoke_shell(term='xterm-256color', width=cols, height=rows)
                 chan.setblocking(0)
                 await websocket.send_text(f"\x1b[32mConnected to host {ssh_host} via SSH\x1b[0m\r\n")
+                if session_key:
+                    chan.send(
+                        f"{_TMUX_BIN_SNIPPET}"
+                        f"if [ -n \"$TMUX_BIN\" ]; then \"$TMUX_BIN\" new-session -A -s {session_key}; "
+                        "else echo '[tmux not found: session persistence disabled]'; fi\n"
+                    )
             except Exception as e:
                 code, message = map_ssh_error(e)
                 logger.error("SSH connection failed: %s (%s)", message, code)

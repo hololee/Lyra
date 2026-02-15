@@ -70,3 +70,22 @@ Optional fingerprint pinning:
 ssh-keyscan <SSH_HOST> | ssh-keygen -lf -
 ```
 2. Save SHA256 fingerprint to setting key `ssh_host_fingerprint` (for example `SHA256:...`).
+
+## 5) Install `tmux` on host (recommended)
+
+Lyra Terminal tab can restore per-tab shell context when `tmux` exists on the SSH target host.
+
+If `tmux` is not installed, terminal still works, but session persistence after refresh/reconnect is disabled.
+
+Install on host OS:
+
+```bash
+# Debian/Ubuntu
+sudo apt-get update && sudo apt-get install -y tmux
+
+# RHEL/CentOS/Fedora
+sudo dnf install -y tmux || sudo yum install -y tmux
+
+# Alpine
+sudo apk add --no-cache tmux
+```
