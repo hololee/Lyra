@@ -11,7 +11,7 @@ axios.defaults.baseURL = '/api';
 const THEME_STORAGE_KEY = 'lyra.theme';
 
 if (typeof document !== 'undefined') {
-  let isDarkTheme = true; // default
+  let isDarkTheme = false; // default
   if (typeof window !== 'undefined') {
     try {
       const stored = window.localStorage.getItem(THEME_STORAGE_KEY);

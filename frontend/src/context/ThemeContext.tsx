@@ -25,12 +25,12 @@ function readStoredTheme(): Theme | null {
 }
 
 function readSystemTheme(): ResolvedTheme {
-  if (typeof window === 'undefined') return 'dark';
+  if (typeof window === 'undefined') return 'light';
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<Theme>(() => readStoredTheme() ?? 'dark');
+  const [theme, setTheme] = useState<Theme>(() => readStoredTheme() ?? 'light');
   const [systemTheme, setSystemTheme] = useState<ResolvedTheme>(() => readSystemTheme());
   const resolvedTheme = theme === 'auto' ? systemTheme : theme;
 
