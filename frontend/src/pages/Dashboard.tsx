@@ -504,13 +504,13 @@ export default function Dashboard() {
                 <RefreshCw size={18} className={loading && hasLoadedOnce ? "animate-spin" : ""} />
             </button>
         </div>
-        <div className="w-full text-left">
+        <div className="w-full overflow-x-auto text-left">
             {!hasLoadedOnce && loading ? (
                  <div className="p-6 text-center text-[var(--text-muted)]">{t('messages.loadingEnvironments')}</div>
             ) : environments.length === 0 ? (
                  <div className="p-6 text-center text-[var(--text-muted)]">{t('messages.noEnvironments')}</div>
             ) : (
-                <table className="w-full">
+                <table className="w-full min-w-[980px]">
                     <thead className="bg-[var(--bg-soft)] text-[var(--text-muted)] text-sm uppercase">
                         <tr>
                             <th className="px-6 py-4 font-medium">{t('labels.name')}</th>
