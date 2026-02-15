@@ -317,6 +317,18 @@ export default function Provisioning() {
           showAlert(t('feedback.provisioning.creationFailedTitle'), t('feedback.provisioning.taskEnqueueFailed'));
           return;
         }
+        if (code === 'security_key_missing') {
+          showAlert(t('feedback.provisioning.creationFailedTitle'), t('feedback.provisioning.securityKeyMissing'));
+          return;
+        }
+        if (code === 'password_encryption_failed') {
+          showAlert(t('feedback.provisioning.creationFailedTitle'), t('feedback.provisioning.passwordEncryptionFailed'));
+          return;
+        }
+        if (code === 'password_decryption_failed') {
+          showAlert(t('feedback.provisioning.creationFailedTitle'), t('feedback.provisioning.passwordDecryptionFailed'));
+          return;
+        }
       }
       showAlert(t('feedback.provisioning.creationFailedTitle'), t('feedback.provisioning.creationFailedMessage'));
     }

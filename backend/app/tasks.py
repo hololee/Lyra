@@ -3,6 +3,7 @@ from .database import DATABASE_URL
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from .models import Environment, Setting
+from .core.security import SecretCipherError, SecretKeyError, decrypt_secret
 import docker
 import tempfile
 import os
@@ -120,16 +121,14 @@ def _validate_runtime_prerequisites(
     )
 
 
-def _build_runtime_command(env, jupyter_mode: Optional[str]) -> str:
-    enable_jupyter = _is_enabled(getattr(env, "enable_jupyter", True))
-    enable_code_server = _is_enabled(getattr(env, "enable_code_server", True))
-
+def _build_runtime_command(jupyter_mode: Optional[str], enable_jupyter: bool, enable_code_server: bool) -> str:
     script_parts = [
         "set -euo pipefail",
         "mkdir -p /var/run/sshd",
         "mkdir -p /etc/ssh",
         "[ -f /etc/ssh/sshd_config ] || touch /etc/ssh/sshd_config",
-        f"echo 'root:{env.root_password}' | chpasswd",
+        'echo "root:${ROOT_PASSWORD}" | chpasswd',
+        "unset ROOT_PASSWORD",
         "grep -q '^PermitRootLogin yes' /etc/ssh/sshd_config || echo 'PermitRootLogin yes' >> /etc/ssh/sshd_config",
         "sshd",
     ]
@@ -326,6 +325,22 @@ def create_environment_task(self, environment_id):
             f"enable_code_server={enable_code_server}"
         )
 
+        if not env.root_password_encrypted:
+            env.status = "error"
+            db.commit()
+            return "password_decryption_failed Missing encrypted root password"
+
+        try:
+            root_password = decrypt_secret(env.root_password_encrypted)
+        except SecretKeyError as error:
+            env.status = "error"
+            db.commit()
+            return f"password_decryption_failed {error}"
+        except SecretCipherError as error:
+            env.status = "error"
+            db.commit()
+            return f"password_decryption_failed {error}"
+
         jupyter_mode = _validate_runtime_prerequisites(
             client,
             image_name,
@@ -345,10 +360,15 @@ def create_environment_task(self, environment_id):
                 "JUPYTER_TOKEN": jupyter_token,
                 "ENABLE_JUPYTER": "1" if enable_jupyter else "0",
                 "ENABLE_CODE_SERVER": "1" if enable_code_server else "0",
+                "ROOT_PASSWORD": root_password,
             },
             "ports": _build_ports_config(env, custom_ports),
             # Keep container running with SSHD
-            "command": _build_runtime_command(env, jupyter_mode if isinstance(jupyter_mode, str) else None),
+            "command": _build_runtime_command(
+                jupyter_mode if isinstance(jupyter_mode, str) else None,
+                enable_jupyter=enable_jupyter,
+                enable_code_server=enable_code_server,
+            ),
         }
 
         # Add DeviceRequests if GPUs are requested and we are not mocking

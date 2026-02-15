@@ -6,6 +6,7 @@ from sqlalchemy import text
 from typing import List
 from ..database import get_db
 from ..models import Environment, Setting
+from ..core.security import SecretCipherError, SecretKeyError, encrypt_secret
 from ..schemas import (
     CustomPortAllocateRequest,
     CustomPortAllocateResponse,
@@ -289,6 +290,19 @@ async def create_environment(env: EnvironmentCreate, db: AsyncSession = Depends(
             detail={"code": "duplicate_environment_name", "message": "Environment name already exists"},
         )
 
+    try:
+        encrypted_root_password = encrypt_secret(env.root_password)
+    except SecretKeyError as error:
+        raise HTTPException(
+            status_code=500,
+            detail={"code": "security_key_missing", "message": str(error)},
+        ) from error
+    except SecretCipherError as error:
+        raise HTTPException(
+            status_code=500,
+            detail={"code": "password_encryption_failed", "message": str(error)},
+        ) from error
+
     # GPU allocation logic
     gpu_indices: list[int] = []
     requested_indices = [int(idx) for idx in (env.selected_gpu_indices or [])]
@@ -390,7 +404,8 @@ async def create_environment(env: EnvironmentCreate, db: AsyncSession = Depends(
                 candidate_env = Environment(
                     name=env.name,
                     container_user=env.container_user,
-                    root_password=env.root_password,
+                    root_password="__redacted__",
+                    root_password_encrypted=encrypted_root_password,
                     dockerfile_content=env.dockerfile_content,
                     enable_jupyter=env.enable_jupyter,
                     enable_code_server=env.enable_code_server,
