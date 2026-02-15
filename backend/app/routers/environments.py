@@ -19,6 +19,7 @@ import docker
 import secrets
 import time
 import random
+import logging
 from sqlalchemy.exc import IntegrityError
 import json
 
@@ -34,6 +35,7 @@ CUSTOM_HOST_PORT_RANGE = (35001, 60000)
 CUSTOM_CONTAINER_PORT_RANGE = (10000, 20000)
 RESERVED_CONTAINER_PORTS = {22, 8080, 8888}
 GPU_ALLOCATION_LOCK_KEY = 93821
+logger = logging.getLogger(__name__)
 
 
 def _is_name_unique_violation(error: IntegrityError) -> bool:
@@ -499,13 +501,69 @@ async def create_environment(env: EnvironmentCreate, db: AsyncSession = Depends(
     return env_dict
 
 
+def _resolve_environment_status(
+    current_status: str,
+    container_status: str,
+    state_status: str,
+    exit_code,
+    oom_killed: bool,
+    error_msg: str,
+) -> str:
+    if container_status == "running":
+        if current_status == "starting":
+            return "running"
+        if current_status == "stopping":
+            return "stopping"
+        if current_status != "running":
+            return "running"
+        return current_status
+
+    if current_status == "stopping":
+        if state_status in ["created", "restarting", "starting"]:
+            return "stopping"
+        return "stopped"
+
+    if current_status == "starting":
+        if state_status in ["created", "restarting", "starting"] and exit_code is None:
+            return "starting"
+        if exit_code is None:
+            return "stopped"
+        if exit_code in [0, 143]:
+            return "stopped"
+        if exit_code == 137:
+            if oom_killed or str(error_msg).strip():
+                return "error"
+            return "stopped"
+        return "error"
+
+    if exit_code is None:
+        return "stopped"
+    if exit_code in [0, 143]:
+        return "stopped"
+    if exit_code == 137:
+        if oom_killed or str(error_msg).strip():
+            return "error"
+        return "stopped"
+    return "error"
+
+
 @router.get("/", response_model=List[EnvironmentResponse])
 async def read_environments(skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Environment).offset(skip).limit(limit))
     envs = result.scalars().all()
     custom_ports_map = await _get_custom_ports_map(db)
 
-    client = docker.from_env()
+    client = None
+    docker_available = True
+    try:
+        client = docker.from_env()
+    except docker.errors.DockerException as error:
+        docker_available = False
+        logger.warning("Docker daemon unavailable while reading environments: %s", error)
+    except Exception as error:
+        docker_available = False
+        logger.warning("Unexpected Docker client initialization failure: %s", error)
+
     status_changed = False
     env_responses = []
 
@@ -513,69 +571,38 @@ async def read_environments(skip: int = 0, limit: int = 100, db: AsyncSession = 
         container_name = f"lyra-{env.name}-{env.id}"
         container_id: str | None = None
 
-        try:
-            container = client.containers.get(container_name)
-            container_id = container.short_id or (container.id[:12] if container.id else None)
-            state_info = container.attrs.get('State', {})
-            container_status = container.status
-            state_status = state_info.get('Status', '')
-            exit_code = state_info.get('ExitCode')
-            oom_killed = state_info.get('OOMKilled', False)
-            error_msg = state_info.get('Error', "")
-
-            if container_status == 'running':
-                if env.status == 'starting':
-                    new_status = 'running'
-                elif env.status == 'stopping':
-                    new_status = 'stopping'
-                elif env.status != 'running':
-                    new_status = 'running'
-                else:
-                    new_status = env.status
-            else:
-                if env.status == 'stopping':
-                    if state_status in ['created', 'restarting', 'starting']:
-                        new_status = 'stopping'
-                    else:
-                        # User-initiated stop may end with non-zero exit codes (e.g. SIGKILL/137).
-                        # While we're in stopping state, treat any finished container as stopped.
-                        new_status = 'stopped'
-                elif env.status == 'starting':
-                    if state_status in ['created', 'restarting', 'starting'] and exit_code is None:
-                        new_status = 'starting'
-                    elif exit_code is None:
-                        new_status = 'stopped'
-                    elif exit_code in [0, 143]:
-                        new_status = 'stopped'
-                    elif exit_code == 137:
-                        if oom_killed or str(error_msg).strip():
-                            new_status = 'error'
-                        else:
-                            new_status = 'stopped'
-                    else:
-                        new_status = 'error'
-                else:
-                    if exit_code is None:
-                        new_status = 'stopped'
-                    elif exit_code in [0, 143]:
-                        new_status = 'stopped'
-                    elif exit_code == 137:
-                        if oom_killed or str(error_msg).strip():
-                            new_status = 'error'
-                        else:
-                            new_status = 'stopped'
-                    else:
-                        new_status = 'error'
-
-            if env.status != new_status:
-                env.status = new_status
-                status_changed = True
-        except docker.errors.NotFound:
-            if env.status in ['running', 'stopping', 'starting']:
-                env.status = 'stopped'
-                status_changed = True
-        except Exception as e:
-            print(f"Error checking container status: {e}")
+        if docker_available and client is not None:
+            try:
+                container = client.containers.get(container_name)
+                container_id = container.short_id or (container.id[:12] if container.id else None)
+                state_info = container.attrs.get("State", {})
+                new_status = _resolve_environment_status(
+                    current_status=env.status,
+                    container_status=container.status,
+                    state_status=state_info.get("Status", ""),
+                    exit_code=state_info.get("ExitCode"),
+                    oom_killed=state_info.get("OOMKilled", False),
+                    error_msg=state_info.get("Error", ""),
+                )
+                if env.status != new_status:
+                    env.status = new_status
+                    status_changed = True
+            except docker.errors.NotFound:
+                if env.status in ["running", "stopping", "starting"]:
+                    env.status = "stopped"
+                    status_changed = True
+            except docker.errors.DockerException as error:
+                logger.warning(
+                    "Docker status lookup failed for env %s. Falling back to DB status: %s",
+                    env.id,
+                    error,
+                )
+            except Exception as error:
+                logger.warning(
+                    "Unexpected status resolution failure for env %s. Falling back to DB status: %s",
+                    env.id,
+                    error,
+                )
 
         env_dict = {
             **env.__dict__,
@@ -585,7 +612,7 @@ async def read_environments(skip: int = 0, limit: int = 100, db: AsyncSession = 
         env_dict.pop("_sa_instance_state", None)
         env_responses.append(env_dict)
 
-    if status_changed:
+    if status_changed and docker_available:
         await db.commit()
 
     return env_responses
