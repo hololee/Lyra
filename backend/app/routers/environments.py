@@ -35,6 +35,7 @@ CUSTOM_HOST_PORT_RANGE = (35001, 60000)
 CUSTOM_CONTAINER_PORT_RANGE = (10000, 20000)
 RESERVED_CONTAINER_PORTS = {22, 8080, 8888}
 GPU_ALLOCATION_LOCK_KEY = 93821
+GPU_OCCUPIED_STATUSES = {"creating", "building", "running", "starting"}
 logger = logging.getLogger(__name__)
 
 
@@ -69,10 +70,12 @@ def _detect_total_gpus() -> int:
 
 
 async def _collect_used_gpu_indices(db: AsyncSession) -> set[int]:
-    result = await db.execute(select(Environment).where(Environment.status.in_(["running", "building"])))
+    result = await db.execute(select(Environment).where(Environment.status.in_(GPU_OCCUPIED_STATUSES)))
     active_envs = result.scalars().all()
     used_indices: set[int] = set()
     for active in active_envs:
+        if active.status not in GPU_OCCUPIED_STATUSES:
+            continue
         if active.gpu_indices:
             used_indices.update(active.gpu_indices)
     return used_indices
