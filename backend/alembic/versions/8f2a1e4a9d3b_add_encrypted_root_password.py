@@ -32,9 +32,15 @@ def _get_fernet() -> Fernet:
 
 
 def upgrade() -> None:
-    op.add_column("environments", sa.Column("root_password_encrypted", sa.Text(), nullable=True))
-
     bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    if not inspector.has_table("environments"):
+        return
+
+    columns = {col["name"] for col in inspector.get_columns("environments")}
+    if "root_password_encrypted" not in columns:
+        op.add_column("environments", sa.Column("root_password_encrypted", sa.Text(), nullable=True))
+
     fernet = _get_fernet()
     rows = bind.execute(
         sa.text(
@@ -63,4 +69,11 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_column("environments", "root_password_encrypted")
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    if not inspector.has_table("environments"):
+        return
+
+    columns = {col["name"] for col in inspector.get_columns("environments")}
+    if "root_password_encrypted" in columns:
+        op.drop_column("environments", "root_password_encrypted")
