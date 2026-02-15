@@ -2,7 +2,7 @@ import Editor from '@monaco-editor/react';
 import axios from 'axios';
 import clsx from 'clsx';
 import { Eye, EyeOff, FolderOpen, Play, Plus, Save, Trash2, Upload } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import Modal from '../components/Modal';
@@ -19,6 +19,61 @@ interface CustomPortMapping {
   host_port: number;
   container_port: number;
 }
+
+const MANAGED_JUPYTER_START = '# >>> LYRA_MANAGED_JUPYTER_START';
+const MANAGED_JUPYTER_END = '# <<< LYRA_MANAGED_JUPYTER_END';
+const MANAGED_CODE_START = '# >>> LYRA_MANAGED_CODE_SERVER_START';
+const MANAGED_CODE_END = '# <<< LYRA_MANAGED_CODE_SERVER_END';
+
+const stripManagedBlocks = (text: string): string => {
+  if (!text) return '';
+  let next = text;
+  const patterns = [
+    new RegExp(`${MANAGED_JUPYTER_START}[\\s\\S]*?${MANAGED_JUPYTER_END}\\n?`, 'g'),
+    new RegExp(`${MANAGED_CODE_START}[\\s\\S]*?${MANAGED_CODE_END}\\n?`, 'g'),
+  ];
+  for (const pattern of patterns) {
+    next = next.replace(pattern, '');
+  }
+  return next.replace(/\n{3,}/g, '\n\n').trimEnd() + '\n';
+};
+
+const buildManagedBlocks = (enableJupyter: boolean, enableCodeServer: boolean): string => {
+  const blocks: string[] = [];
+  if (enableJupyter) {
+    blocks.push(
+      `${MANAGED_JUPYTER_START}`,
+      '# Managed by Lyra provisioning service toggle',
+      'RUN python3 -m pip install --no-cache-dir jupyterlab',
+      `${MANAGED_JUPYTER_END}`
+    );
+  }
+  if (enableCodeServer) {
+    blocks.push(
+      `${MANAGED_CODE_START}`,
+      '# Managed by Lyra provisioning service toggle',
+      'RUN if ! command -v curl >/dev/null 2>&1; then \\',
+      '      (command -v apt-get >/dev/null 2>&1 && apt-get update && apt-get install -y --no-install-recommends curl) || \\',
+      '      (command -v apk >/dev/null 2>&1 && apk add --no-cache curl) || \\',
+      '      (command -v dnf >/dev/null 2>&1 && dnf install -y curl) || \\',
+      '      (command -v yum >/dev/null 2>&1 && yum install -y curl); \\',
+      '    fi && \\',
+      '    curl -fsSL https://code-server.dev/install.sh -o /tmp/install-code-server.sh && \\',
+      '    sh /tmp/install-code-server.sh',
+      `${MANAGED_CODE_END}`
+    );
+  }
+  return blocks.join('\n');
+};
+
+const composeDockerfile = (userDockerfile: string, enableJupyter: boolean, enableCodeServer: boolean): string => {
+  const userPart = stripManagedBlocks(userDockerfile).trimEnd();
+  const managedPart = buildManagedBlocks(enableJupyter, enableCodeServer);
+  if (!managedPart) {
+    return `${userPart}\n`;
+  }
+  return `${userPart}\n\n${managedPart}\n`;
+};
 
 export default function Provisioning() {
   const navigate = useNavigate();
@@ -54,7 +109,10 @@ export default function Provisioning() {
   const [mounts, setMounts] = useState<MountPoint[]>([]);
   const [customPorts, setCustomPorts] = useState<CustomPortMapping[]>([]);
   const [isAllocatingPort, setIsAllocatingPort] = useState(false);
-  const [dockerfile, setDockerfile] = useState('FROM python:3.11-slim\n\n');
+  const [userDockerfile, setUserDockerfile] = useState('FROM python:3.11-slim\n');
+  const [enableJupyter, setEnableJupyter] = useState(true);
+  const [enableCodeServer, setEnableCodeServer] = useState(true);
+  const isManagedEditToastShown = useRef(false);
 
   // Fetch GPU Resources and Load Template
   useEffect(() => {
@@ -72,7 +130,7 @@ export default function Provisioning() {
 
              // Only load Dockerfile content
              if (config.dockerfile_content) {
-               setDockerfile(config.dockerfile_content);
+               setUserDockerfile(stripManagedBlocks(config.dockerfile_content));
                setErrors((prev) => ({ ...prev, dockerfile: undefined }));
              }
 
@@ -130,6 +188,11 @@ export default function Provisioning() {
     setCustomPorts((prev) => prev.filter((_, i) => i !== index));
   };
 
+  const renderedDockerfile = useMemo(
+    () => composeDockerfile(userDockerfile, enableJupyter, enableCodeServer),
+    [userDockerfile, enableJupyter, enableCodeServer]
+  );
+
   // Error State
   const [errors, setErrors] = useState<{name?: string, password?: string, dockerfile?: string}>({});
 
@@ -141,7 +204,7 @@ export default function Provisioning() {
         newErrors.name = t('provisioning.errorEnvironmentNameFormat');
     }
     if (!password.trim()) newErrors.password = t('provisioning.errorRootPasswordRequired');
-    if (!dockerfile.trim()) newErrors.dockerfile = t('provisioning.errorDockerfileRequired');
+    if (!stripManagedBlocks(userDockerfile).trim()) newErrors.dockerfile = t('provisioning.errorDockerfileRequired');
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
@@ -160,7 +223,9 @@ export default function Provisioning() {
         root_password: password,
         mount_config: validMounts,
         custom_ports: customPorts,
-        dockerfile_content: dockerfile,
+        dockerfile_content: renderedDockerfile,
+        enable_jupyter: enableJupyter,
+        enable_code_server: enableCodeServer,
         gpu_count: gpuCount
       };
 
@@ -190,7 +255,7 @@ export default function Provisioning() {
       try {
           // Only save Dockerfile content as requested
           const config = {
-              dockerfile_content: dockerfile
+              dockerfile_content: stripManagedBlocks(userDockerfile)
           };
 
           await axios.post('templates/', {
@@ -424,6 +489,34 @@ export default function Provisioning() {
             </div>
           </section>
 
+          <section className="bg-[var(--bg-elevated)] p-6 rounded-xl border border-[var(--border)] space-y-4">
+            <h3 className="text-lg font-semibold text-[var(--text)] flex items-center gap-2">
+              <span className="w-1 h-5 bg-indigo-500 rounded-full"></span>
+              {t('provisioning.optionalServices')}
+            </h3>
+            <p className="text-xs text-[var(--text-muted)]">{t('provisioning.optionalServicesDescription')}</p>
+            <div className="space-y-3">
+              <label className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--bg-soft)] px-3 py-2.5 cursor-pointer">
+                <span className="text-sm text-[var(--text)]">{t('provisioning.enableJupyter')}</span>
+                <input
+                  type="checkbox"
+                  checked={enableJupyter}
+                  onChange={(e) => setEnableJupyter(e.target.checked)}
+                  className="h-4 w-4 rounded border-[var(--border)] bg-[var(--bg-elevated)] text-blue-600 focus:ring-blue-500"
+                />
+              </label>
+              <label className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--bg-soft)] px-3 py-2.5 cursor-pointer">
+                <span className="text-sm text-[var(--text)]">{t('provisioning.enableCodeServer')}</span>
+                <input
+                  type="checkbox"
+                  checked={enableCodeServer}
+                  onChange={(e) => setEnableCodeServer(e.target.checked)}
+                  className="h-4 w-4 rounded border-[var(--border)] bg-[var(--bg-elevated)] text-blue-600 focus:ring-blue-500"
+                />
+              </label>
+            </div>
+          </section>
+
           {/* Storage */}
           <section className="bg-[var(--bg-elevated)] p-6 rounded-xl border border-[var(--border)] space-y-4">
             <div className="flex justify-between items-center">
@@ -549,7 +642,6 @@ export default function Provisioning() {
                     <div className="p-1.5 bg-blue-500/10 rounded-md">
                         <span className="text-blue-400 font-mono text-sm font-bold">{t('provisioning.dockerfile')}</span>
                     </div>
-                    <span className="text-sm text-[var(--text-muted)]">{t('provisioning.buildConfiguration')}</span>
                 </div>
                 <div className="flex gap-2">
                     <button
@@ -578,10 +670,21 @@ export default function Provisioning() {
                     height="100%"
                     defaultLanguage="dockerfile"
                     theme={resolvedTheme === 'dark' ? 'vs-dark' : 'vs'}
-                    value={dockerfile}
+                    value={renderedDockerfile}
                     onChange={(value) => {
-                      setDockerfile(value || '');
-                      if (errors.dockerfile && (value || '').trim()) {
+                      const nextValue = value || '';
+                      const currentNormalized = stripManagedBlocks(renderedDockerfile);
+                      const normalized = stripManagedBlocks(nextValue);
+                      const isManagedOnlyEdit = nextValue !== renderedDockerfile && normalized === currentNormalized;
+                      if (isManagedOnlyEdit && !isManagedEditToastShown.current) {
+                        showToast(t('provisioning.managedBlockLockedNotice'), 'info');
+                        isManagedEditToastShown.current = true;
+                        window.setTimeout(() => {
+                          isManagedEditToastShown.current = false;
+                        }, 1500);
+                      }
+                      setUserDockerfile(normalized);
+                      if (errors.dockerfile && normalized.trim()) {
                         setErrors((prev) => ({ ...prev, dockerfile: undefined }));
                       }
                     }}
@@ -635,7 +738,7 @@ export default function Provisioning() {
                                 <button
                                     onClick={() => {
                                         if (template.config.dockerfile_content) {
-                                            setDockerfile(template.config.dockerfile_content);
+                                            setUserDockerfile(stripManagedBlocks(template.config.dockerfile_content));
                                             setErrors((prev) => ({ ...prev, dockerfile: undefined }));
                                             setIsLoadModalOpen(false);
                                             showToast(t('feedback.provisioning.templateLoaded'), "success");
