@@ -9,6 +9,8 @@ Lyra is a web application designed to manage GPU-enabled build environments and 
 
 ## Quick Start
 
+Server deployment guide: [`INSTRUCTIONS.md`](INSTRUCTIONS.md)
+
 ### Prerequisites
 - Docker & Docker Compose
 - Python 3.11+ (for local development)
@@ -187,6 +189,30 @@ Error policy:
 - Fingerprint formats:
   - `SHA256:<base64>`
   - MD5 fingerprint (`aa:bb:...`) also supported for compatibility
+
+### Pre-register known_hosts (recommended for `reject`)
+
+`SSH_KNOWN_HOSTS_PATH` is resolved inside the backend container.
+Pre-register target host keys before users open Terminal:
+
+```bash
+docker compose exec backend sh -lc 'mkdir -p /root/.ssh && ssh-keyscan -H <SSH_HOST> >> /root/.ssh/known_hosts'
+```
+
+Example:
+
+```bash
+docker compose exec backend sh -lc 'mkdir -p /root/.ssh && ssh-keyscan -H host.docker.internal >> /root/.ssh/known_hosts'
+```
+
+### Pin host fingerprint via setting (optional hardening)
+
+1. Get fingerprint:
+```bash
+ssh-keyscan <SSH_HOST> | ssh-keygen -lf -
+```
+2. Save SHA256 fingerprint to setting key `ssh_host_fingerprint` (for example: `SHA256:...`).
+3. When `ssh_host_fingerprint` is set, fingerprint verification is enforced before authentication.
 
 ---
 
