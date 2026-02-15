@@ -141,6 +141,30 @@ docker compose exec backend alembic upgrade head
 
 ---
 
+## Settings API Policy
+
+`PUT /api/settings/{key}` only allows direct updates for:
+
+- `app_name`
+- `favicon_data_url`
+- `dashboard_announcement_markdown`
+- `ssh_port`
+- `ssh_username`
+- `ssh_auth_method`
+- `ssh_password`
+
+Internal keys are protected and cannot be directly accessed/updated:
+
+- `jupyter_token:*`
+- `custom_ports:*`
+
+Error policy:
+
+- `400` for invalid or unsupported keys
+- `403` for protected internal keys
+
+---
+
 ## i18n Guide
 
 Frontend supports `en` and `ko` with default language `en`.
