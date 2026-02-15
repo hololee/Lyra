@@ -352,8 +352,26 @@ export default function TerminalPage() {
 
   const addTab = () => createTab();
 
-  const closeTab = (tabId: string) => {
+  const closeTab = async (tabId: string) => {
     if (tabs.length <= 1) return;
+    const targetTab = tabs.find((tab) => tab.id === tabId);
+
+    let privateKey: string | undefined;
+    if (authMethod === 'key') {
+      privateKey = decryptedPrivateKeyRef.current ?? undefined;
+      if (!privateKey) {
+        const encrypted = localStorage.getItem('ssh_private_key_encrypted');
+        if (encrypted && masterPassword) {
+          try {
+            privateKey = await decrypt(encrypted, masterPassword);
+            decryptedPrivateKeyRef.current = privateKey;
+          } catch {
+            // Ignore key decryption failure; tab close should continue.
+          }
+        }
+      }
+    }
+
     const session = terminalSessions.current[tabId];
     if (session) {
       session.ws.close();
@@ -369,6 +387,17 @@ export default function TerminalPage() {
     if (activeTabId === tabId) {
       const nextActive = nextTabs[Math.max(0, idx - 1)]?.id || nextTabs[0]?.id;
       if (nextActive) setActiveTabId(nextActive);
+    }
+
+    if (targetTab?.sessionKey) {
+      try {
+        await axios.post('terminal/tmux/sessions/kill', {
+          privateKey,
+          session_names: [targetTab.sessionKey],
+        });
+      } catch {
+        // Ignore kill failures on manual tab close.
+      }
     }
   };
 
@@ -500,7 +529,9 @@ export default function TerminalPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => closeTab(tab.id)}
+                    onClick={() => {
+                      void closeTab(tab.id);
+                    }}
                     disabled={tabs.length <= 1}
                     className="rounded p-0.5 text-[var(--text-muted)] hover:text-[var(--text)] disabled:opacity-40 disabled:cursor-not-allowed"
                     title={t('terminal.closeTab')}
