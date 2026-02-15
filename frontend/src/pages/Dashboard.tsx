@@ -255,7 +255,14 @@ export default function Dashboard() {
             </div>
           </div>
         ) : (
-          <span className="text-[var(--text-muted)]">-</span>
+          <button
+            type="button"
+            disabled
+            aria-disabled="true"
+            className="p-1 rounded text-[var(--border)] opacity-70 cursor-not-allowed"
+          >
+            <LayoutTemplate size={14} />
+          </button>
         ),
       },
       {
@@ -274,7 +281,14 @@ export default function Dashboard() {
             </div>
           </div>
         ) : (
-          <span className="text-[var(--text-muted)]">-</span>
+          <button
+            type="button"
+            disabled
+            aria-disabled="true"
+            className="p-1 rounded text-[var(--border)] opacity-70 cursor-not-allowed"
+          >
+            <Code2 size={14} />
+          </button>
         ),
       },
     ];
