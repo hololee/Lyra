@@ -59,6 +59,8 @@ CELERY_BROKER_URL=redis://redis:6379/0
 CELERY_RESULT_BACKEND=redis://redis:6379/0
 APP_SECRET_KEY=REPLACE_WITH_VALID_FERNET_KEY
 ALLOW_ORIGINS=http://YOUR_SERVER_IP,https://YOUR_DOMAIN
+SSH_HOST_KEY_POLICY=reject
+SSH_KNOWN_HOSTS_PATH=/root/.ssh/known_hosts
 ```
 
 - `APP_SECRET_KEY` is required for root password encryption/decryption.
@@ -149,9 +151,11 @@ docker compose exec backend alembic upgrade head
 - `favicon_data_url`
 - `dashboard_announcement_markdown`
 - `ssh_port`
+- `ssh_host`
 - `ssh_username`
 - `ssh_auth_method`
 - `ssh_password`
+- `ssh_host_fingerprint`
 
 Internal keys are protected and cannot be directly accessed/updated:
 
@@ -162,6 +166,22 @@ Error policy:
 
 - `400` for invalid or unsupported keys
 - `403` for protected internal keys
+
+---
+
+## SSH Host Key Policy
+
+- Backend enforces SSH host key verification for both:
+  - `POST /api/terminal/test-ssh`
+  - `GET /api/terminal/ws` (websocket terminal path)
+- Policy mode is controlled by `SSH_HOST_KEY_POLICY`:
+  - `reject` (recommended): unknown/untrusted host keys are rejected
+  - `accept-new` (development only): unknown keys are auto-accepted
+- `SSH_KNOWN_HOSTS_PATH` points to the known_hosts file used for trust checks.
+- If `ssh_host_fingerprint` setting is configured, fingerprint validation is applied after connect and takes precedence over implicit trust.
+- Fingerprint formats:
+  - `SHA256:<base64>`
+  - MD5 fingerprint (`aa:bb:...`) also supported for compatibility
 
 ---
 

@@ -46,6 +46,8 @@ services:
       - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND?CELERY_RESULT_BACKEND is required}
       - ALLOW_ORIGINS=${ALLOW_ORIGINS?ALLOW_ORIGINS is required}
       - APP_SECRET_KEY=${APP_SECRET_KEY?APP_SECRET_KEY is required}
+      - SSH_HOST_KEY_POLICY=${SSH_HOST_KEY_POLICY?SSH_HOST_KEY_POLICY is required}
+      - SSH_KNOWN_HOSTS_PATH=${SSH_KNOWN_HOSTS_PATH?SSH_KNOWN_HOSTS_PATH is required}
     depends_on:
       db:
         condition: service_healthy
