@@ -181,9 +181,12 @@ export default function Templates() {
             </button>
           </div>
       ) : (
-        <div className="space-y-4">
+        <div className="bg-[var(--bg-elevated)] rounded-xl border border-[var(--border)] overflow-hidden">
           {templates.map((template) => (
-            <div key={template.id} className="bg-[var(--bg-elevated)] rounded-xl border border-[var(--border)] p-4 flex items-center justify-between group transition-all hover:brightness-95">
+            <div
+              key={template.id}
+              className="p-4 flex items-center justify-between group transition-colors hover:bg-[var(--bg-soft)]/60 border-b border-[var(--border)] last:border-b-0"
+            >
 
               <div className="flex items-center gap-4 flex-1 min-w-0 pointer-events-none">
 
