@@ -297,7 +297,7 @@ export default function Dashboard() {
       <div className="flex items-center gap-2">
         {accessItems.map((item, index) => (
           <div key={item.key} className="flex items-center gap-2">
-            {index > 0 && <span className="text-[var(--text-muted)]">/</span>}
+            {index > 0 && <span className="w-1" aria-hidden="true" />}
             {item.node}
           </div>
         ))}
