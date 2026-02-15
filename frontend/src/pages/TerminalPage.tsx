@@ -421,57 +421,63 @@ export default function TerminalPage() {
         </div>
       </header>
 
-      <div className="flex items-center gap-2 border-b border-[var(--border)] pb-2">
-        <div className="flex items-center gap-2 overflow-x-auto min-w-0">
-          {tabs.map((tab) => {
-            const active = tab.id === activeTabId;
-            return (
-              <div
-                key={tab.id}
-                className={`flex items-center gap-1 rounded-md border px-3 py-1.5 text-sm ${
-                  active
-                    ? 'bg-[var(--bg-soft)] border-[var(--border-strong)] text-[var(--text)]'
-                    : 'bg-transparent border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text)]'
-                }`}
-              >
-                <button type="button" onClick={() => setActiveTabId(tab.id)} className="whitespace-nowrap">
-                  {t('terminal.hostTab', { number: tab.number })}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => closeTab(tab.id)}
-                  disabled={tabs.length <= 1}
-                  className="rounded p-0.5 text-[var(--text-muted)] hover:text-[var(--text)] disabled:opacity-40 disabled:cursor-not-allowed"
-                  title={t('terminal.closeTab')}
+      <div className="flex-1 min-h-0 rounded-xl border border-[var(--terminal-border)] overflow-hidden shadow-2xl bg-[var(--terminal-bg)]">
+        <div className="flex items-center gap-2 border-b border-[var(--terminal-border)] bg-[var(--terminal-bg)] p-2">
+          <div className="flex items-center gap-2 overflow-x-auto min-w-0">
+            {tabs.map((tab) => {
+              const active = tab.id === activeTabId;
+              return (
+                <div
+                  key={tab.id}
+                  className={`group flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-mono transition-all ${
+                    active
+                      ? 'bg-black/35 border-emerald-500/50 text-emerald-300 shadow-[inset_0_0_0_1px_rgba(16,185,129,0.25)]'
+                      : 'bg-transparent border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--border-strong)]'
+                  }`}
                 >
-                  <X size={12} />
-                </button>
-              </div>
-            );
-          })}
-        </div>
-        <button
-          type="button"
-          onClick={addTab}
-          className="ml-auto inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--bg-soft)] px-2 py-1.5 text-xs text-[var(--text)] hover:brightness-95"
-          title={t('terminal.addTab')}
-        >
-          <Plus size={14} />
-          {t('terminal.addTab')}
-        </button>
-      </div>
-
-      <div className="flex-1 rounded-xl border border-[var(--terminal-border)] p-2 overflow-hidden shadow-2xl bg-[var(--terminal-bg)]">
-        {tabs.map((tab) => (
-          <div key={tab.id} className={tab.id === activeTabId ? 'w-full h-full' : 'hidden'}>
-            <div
-              ref={(el) => {
-                terminalRefs.current[tab.id] = el;
-              }}
-              className="w-full h-full"
-            />
+                  <span className={`h-1.5 w-1.5 rounded-full ${active ? 'bg-emerald-400' : 'bg-[var(--text-muted)]/45 group-hover:bg-[var(--text-muted)]'}`} />
+                  <button
+                    type="button"
+                    onClick={() => setActiveTabId(tab.id)}
+                    className="whitespace-nowrap tracking-tight"
+                  >
+                    {t('terminal.hostTab', { number: tab.number })}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => closeTab(tab.id)}
+                    disabled={tabs.length <= 1}
+                    className="rounded p-0.5 text-[var(--text-muted)] hover:text-[var(--text)] disabled:opacity-40 disabled:cursor-not-allowed"
+                    title={t('terminal.closeTab')}
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              );
+            })}
           </div>
-        ))}
+          <button
+            type="button"
+            onClick={addTab}
+            className="ml-auto inline-flex items-center gap-1 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1.5 text-xs font-medium text-emerald-300 hover:bg-emerald-500/15 transition-colors"
+            title={t('terminal.addTab')}
+          >
+            <Plus size={14} />
+            {t('terminal.addTab')}
+          </button>
+        </div>
+        <div className="h-[calc(100%-52px)] p-2">
+          {tabs.map((tab) => (
+            <div key={tab.id} className={tab.id === activeTabId ? 'w-full h-full' : 'hidden'}>
+              <div
+                ref={(el) => {
+                  terminalRefs.current[tab.id] = el;
+                }}
+                className="w-full h-full"
+              />
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
