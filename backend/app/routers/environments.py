@@ -285,6 +285,8 @@ async def create_environment(env: EnvironmentCreate, db: AsyncSession = Depends(
             container_user=env.container_user,
             root_password=env.root_password,
             dockerfile_content=env.dockerfile_content,
+            enable_jupyter=env.enable_jupyter,
+            enable_code_server=env.enable_code_server,
             mount_config=[m.dict() for m in env.mount_config],
             gpu_indices=gpu_indices,
             ssh_port=ssh_port,
@@ -470,6 +472,8 @@ async def create_jupyter_launch_url(environment_id: str, db: AsyncSession = Depe
     env = result.scalars().first()
     if env is None:
         raise HTTPException(status_code=404, detail="Environment not found")
+    if not env.enable_jupyter:
+        raise HTTPException(status_code=409, detail="Jupyter is disabled for this environment")
     if env.status != "running":
         raise HTTPException(status_code=409, detail="Environment must be running")
 
@@ -508,6 +512,8 @@ async def launch_jupyter_with_ticket(
     env = result.scalars().first()
     if env is None:
         raise HTTPException(status_code=404, detail="Environment not found")
+    if not env.enable_jupyter:
+        raise HTTPException(status_code=409, detail="Jupyter is disabled for this environment")
     if env.status != "running":
         raise HTTPException(status_code=409, detail="Environment must be running")
 

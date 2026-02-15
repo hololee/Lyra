@@ -82,6 +82,10 @@ docker compose exec backend alembic revision --autogenerate -m "Description of c
 docker compose exec backend alembic upgrade head
 ```
 
+`Environment` now includes optional service flags in API payloads:
+- `enable_jupyter` (default: `true`)
+- `enable_code_server` (default: `true`)
+
 ---
 
 ## i18n Guide
