@@ -163,6 +163,9 @@ const koCommon = {
   terminal: {
     title: '터미널',
     subtitle: 'SSH를 통한 호스트 셸 직접 접속',
+    hostTab: '호스트 {{number}}',
+    addTab: '새 탭',
+    closeTab: '탭 닫기',
     setupRequiredTitle: '설정 필요',
     setupRequiredMessage: '호스트 서버 연결이 아직 설정되지 않았습니다. 설정에서 SSH 정보를 입력하세요.',
     goToSettings: '설정으로 이동',
@@ -177,6 +180,11 @@ const koCommon = {
     keyDecrypted: '[키 복호화 성공]',
     decryptFailed: '[복호화 실패: 잘못된 패스프레이즈]',
     connectionClosed: '[연결 종료]',
+    tmuxInstallTitle: '세션 유지를 위한 tmux 설치',
+    tmuxInstallMessage: '호스트에 tmux가 설치되어 있지 않습니다. 새로고침/재접속 후 세션 유지를 위해 지금 설치할까요?',
+    tmuxInstallInProgress: 'tmux 설치 중...',
+    tmuxInstallSuccess: 'tmux 설치가 완료되었습니다. 새 탭부터 세션 복구가 적용됩니다.',
+    tmuxInstallFailed: 'tmux 설치에 실패했습니다. 기본 fallback 모드(비지속 세션)로 동작합니다.',
   },
   settings: {
     title: '설정',

@@ -164,6 +164,9 @@ const enCommon = {
   terminal: {
     title: 'Terminal',
     subtitle: 'Direct access to host shell via SSH',
+    hostTab: 'Host {{number}}',
+    addTab: 'New Tab',
+    closeTab: 'Close tab',
     setupRequiredTitle: 'Setup Required',
     setupRequiredMessage: 'Host server connection is not configured yet. Please provide SSH details in the settings.',
     goToSettings: 'Go to Settings',
@@ -178,6 +181,12 @@ const enCommon = {
     keyDecrypted: '[Key Decrypted Successfully]',
     decryptFailed: '[Decryption Failed: Invalid Passphrase]',
     connectionClosed: '[Connection Closed]',
+    tmuxInstallTitle: 'Install tmux for session persistence',
+    tmuxInstallMessage:
+      'tmux is not installed on the host. Install it now to keep terminal sessions after refresh/reconnect?',
+    tmuxInstallInProgress: 'Installing tmux...',
+    tmuxInstallSuccess: 'tmux installed successfully. New tabs will use persistent sessions.',
+    tmuxInstallFailed: 'Failed to install tmux. Fallback mode (non-persistent) will be used.',
   },
   settings: {
     title: 'Settings',

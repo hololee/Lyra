@@ -8,6 +8,7 @@ from ..models import Setting
 import json
 from pydantic import BaseModel
 from typing import Optional
+import re
 from ..core.ssh_policy import connect_ssh, map_ssh_error
 
 
@@ -28,6 +29,10 @@ class SshTestRequest(BaseModel):
     password: Optional[str] = None
     privateKey: Optional[str] = None
     hostFingerprint: Optional[str] = None
+
+
+class TmuxBootstrapRequest(BaseModel):
+    privateKey: Optional[str] = None
 
 
 @router.post("/test-ssh")
@@ -62,6 +67,107 @@ async def _send_ws_error(websocket: WebSocket, code: str, message: str):
     await websocket.send_text(json.dumps({"type": "error", "code": code, "message": message}))
 
 
+def _sanitize_session_key(raw: Optional[str]) -> Optional[str]:
+    if not raw:
+        return None
+    cleaned = re.sub(r"[^a-zA-Z0-9_-]", "_", raw)[:64]
+    return cleaned or None
+
+
+async def _connect_terminal_ssh(db: AsyncSession, private_key: Optional[str] = None):
+    ssh_host = await get_setting_value(db, "ssh_host")
+    ssh_port_str = await get_setting_value(db, "ssh_port", "22")
+    ssh_port = int(ssh_port_str) if ssh_port_str.isdigit() else 22
+    ssh_user = await get_setting_value(db, "ssh_username")
+    ssh_auth_method = await get_setting_value(db, "ssh_auth_method", "password")
+    ssh_password = await get_setting_value(db, "ssh_password")
+    ssh_host_fingerprint = await get_setting_value(db, "ssh_host_fingerprint")
+
+    if not ssh_host or not ssh_user:
+        raise ValueError("ssh_host_not_configured")
+
+    return connect_ssh(
+        host=ssh_host,
+        port=ssh_port,
+        username=ssh_user,
+        auth_method=ssh_auth_method,
+        password=ssh_password,
+        private_key=private_key,
+        host_fingerprint=ssh_host_fingerprint,
+        timeout=10,
+    )
+
+
+def _exec_ssh_command(ssh_client, command: str, timeout: int = 20):
+    stdin, stdout, stderr = ssh_client.exec_command(command, timeout=timeout)
+    exit_code = stdout.channel.recv_exit_status()
+    out = stdout.read().decode("utf-8", errors="ignore")
+    err = stderr.read().decode("utf-8", errors="ignore")
+    return exit_code, out.strip(), err.strip()
+
+
+@router.post("/tmux/status")
+async def tmux_status(req: TmuxBootstrapRequest, db: AsyncSession = Depends(get_db)):
+    ssh_client = None
+    try:
+        ssh_client = await _connect_terminal_ssh(db, req.privateKey)
+        check_cmd = (
+            "if command -v tmux >/dev/null 2>&1; then echo INSTALLED; "
+            "elif command -v apt-get >/dev/null 2>&1 || command -v dnf >/dev/null 2>&1 || "
+            "command -v yum >/dev/null 2>&1 || command -v apk >/dev/null 2>&1; then echo MISSING_INSTALLABLE; "
+            "else echo MISSING_UNSUPPORTED; fi"
+        )
+        _, out, _ = _exec_ssh_command(ssh_client, check_cmd, timeout=15)
+        installed = out == "INSTALLED"
+        can_install = out == "MISSING_INSTALLABLE"
+        return {"status": "success", "installed": installed, "canInstall": can_install}
+    except ValueError:
+        return {"status": "error", "code": "ssh_host_not_configured", "message": "Host server is not configured."}
+    except Exception as e:
+        code, message = map_ssh_error(e)
+        return {"status": "error", "code": code, "message": message}
+    finally:
+        if ssh_client:
+            ssh_client.close()
+
+
+@router.post("/tmux/install")
+async def install_tmux(req: TmuxBootstrapRequest, db: AsyncSession = Depends(get_db)):
+    ssh_client = None
+    try:
+        ssh_client = await _connect_terminal_ssh(db, req.privateKey)
+        install_cmd = (
+            "set -e; "
+            "if command -v tmux >/dev/null 2>&1; then echo INSTALLED; exit 0; fi; "
+            "if [ \"$(id -u)\" -eq 0 ]; then SUDO=''; "
+            "elif command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then SUDO='sudo -n '; "
+            "else echo NO_PRIVILEGE; exit 10; fi; "
+            "if command -v apt-get >/dev/null 2>&1; then ${SUDO}apt-get update && ${SUDO}apt-get install -y tmux; "
+            "elif command -v dnf >/dev/null 2>&1; then ${SUDO}dnf install -y tmux; "
+            "elif command -v yum >/dev/null 2>&1; then ${SUDO}yum install -y tmux; "
+            "elif command -v apk >/dev/null 2>&1; then ${SUDO}apk add --no-cache tmux; "
+            "else echo UNSUPPORTED_PM; exit 11; fi; "
+            "command -v tmux >/dev/null 2>&1 && echo INSTALLED"
+        )
+        code, out, err = _exec_ssh_command(ssh_client, install_cmd, timeout=180)
+        if code == 0 and "INSTALLED" in out:
+            return {"status": "success", "installed": True}
+        if code == 10:
+            return {"status": "error", "code": "tmux_install_no_privilege", "message": "Insufficient privileges to install tmux."}  # noqa: E501
+        if code == 11:
+            return {"status": "error", "code": "tmux_install_unsupported", "message": "Unsupported package manager."}
+        message = err or out or "tmux install failed"
+        return {"status": "error", "code": "tmux_install_failed", "message": message}
+    except ValueError:
+        return {"status": "error", "code": "ssh_host_not_configured", "message": "Host server is not configured."}
+    except Exception as e:
+        code, message = map_ssh_error(e)
+        return {"status": "error", "code": code, "message": message}
+    finally:
+        if ssh_client:
+            ssh_client.close()
+
+
 @router.websocket("/ws")
 async def websocket_terminal(websocket: WebSocket, db: AsyncSession = Depends(get_db)):
     await websocket.accept()
@@ -87,6 +193,7 @@ async def websocket_terminal(websocket: WebSocket, db: AsyncSession = Depends(ge
             return
 
         ssh_key = init_data.get("privateKey")
+        session_key = _sanitize_session_key(init_data.get("sessionKey"))
         cols = init_data.get("cols", 80)
         rows = init_data.get("rows", 24)
 
@@ -110,6 +217,11 @@ async def websocket_terminal(websocket: WebSocket, db: AsyncSession = Depends(ge
                 chan = ssh_client.invoke_shell(term='xterm-256color', width=cols, height=rows)
                 chan.setblocking(0)
                 await websocket.send_text(f"\x1b[32mConnected to host {ssh_host} via SSH\x1b[0m\r\n")
+                if session_key:
+                    chan.send(
+                        f"if command -v tmux >/dev/null 2>&1; then tmux new-session -A -s {session_key}; "
+                        "else echo '[tmux not found: session persistence disabled]'; fi\n"
+                    )
             except Exception as e:
                 code, message = map_ssh_error(e)
                 logger.error("SSH connection failed: %s (%s)", message, code)
