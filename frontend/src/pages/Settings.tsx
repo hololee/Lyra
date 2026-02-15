@@ -334,7 +334,6 @@ export default function Settings() {
   const loadTmuxSessions = useCallback(async () => {
     try {
       setTmuxLoading(true);
-      setSessionStatus({ type: 'loading', message: t('feedback.settings.tmuxSessionsLoading') });
       const privateKey = await resolvePrivateKeyForTmuxOps();
       const res = await axios.post('terminal/tmux/sessions/list', {
         privateKey,
@@ -355,11 +354,7 @@ export default function Settings() {
       const sessions = (res.data.sessions || []) as TmuxSession[];
       setTmuxSessions(sessions);
       setSelectedTmuxSessions((prev) => prev.filter((name) => sessions.some((s) => s.name === name)));
-      setSessionStatus({
-        type: 'success',
-        message: t('feedback.settings.tmuxSessionsLoaded', { count: sessions.length }),
-      });
-      setTimeout(() => setSessionStatus({ type: 'idle' }), 3000);
+      setSessionStatus({ type: 'idle' });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       setSessionStatus({ type: 'error', message: withApiMessage(t, 'feedback.settings.tmuxSessionsLoadFailed', message) });
@@ -381,7 +376,6 @@ export default function Settings() {
 
     try {
       setTmuxLoading(true);
-      setSessionStatus({ type: 'loading', message: t('feedback.settings.tmuxSessionsKilling') });
       const privateKey = await resolvePrivateKeyForTmuxOps();
       const res = await axios.post('terminal/tmux/sessions/kill', {
         privateKey,
@@ -394,16 +388,9 @@ export default function Settings() {
         });
         return;
       }
-      setSessionStatus({
-        type: 'success',
-        message: t('feedback.settings.tmuxSessionsKillResult', {
-          removed: Number(res.data?.removed_count || 0),
-          skipped: Number(res.data?.skipped_count || 0),
-        }),
-      });
+      setSessionStatus({ type: 'idle' });
       setSelectedTmuxSessions([]);
       await loadTmuxSessions();
-      setTimeout(() => setSessionStatus({ type: 'idle' }), 3000);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       setSessionStatus({ type: 'error', message: withApiMessage(t, 'feedback.settings.tmuxSessionsKillFailed', message) });
@@ -958,19 +945,9 @@ export default function Settings() {
               {t('settings.killSelectedTerminalSessions')}
             </button>
 
-            {sessionStatus.message && (
-              <div className={`flex items-center gap-2 text-sm p-3 rounded-lg border ${
-                sessionStatus.type === 'success'
-                  ? 'text-green-400 bg-green-500/5 border-green-500/20'
-                  : sessionStatus.type === 'loading'
-                    ? 'text-blue-400 bg-blue-500/5 border-blue-500/20'
-                    : 'text-red-400 bg-red-500/5 border-red-500/20'
-              }`}>
-                {sessionStatus.type === 'success'
-                  ? <CheckCircle2 size={18} className="shrink-0" />
-                  : sessionStatus.type === 'loading'
-                    ? <RefreshCw size={18} className="shrink-0 animate-spin" />
-                    : <AlertCircle size={18} className="shrink-0" />}
+            {sessionStatus.type === 'error' && sessionStatus.message && (
+              <div className="flex items-center gap-2 text-sm p-3 rounded-lg border text-red-400 bg-red-500/5 border-red-500/20">
+                <AlertCircle size={18} className="shrink-0" />
                 <span className="font-medium">{sessionStatus.message}</span>
               </div>
             )}
