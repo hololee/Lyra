@@ -133,6 +133,7 @@ const enCommon = {
     noDescription: 'No description',
     errorEnvironmentNameRequired: 'Environment name is required.',
     errorEnvironmentNameFormat: 'Only English letters, numbers, and hyphens(-) are allowed.',
+    errorEnvironmentNameDuplicate: 'This environment name is already in use.',
     errorRootPasswordRequired: 'Root password is required.',
     errorDockerfileRequired: 'Dockerfile is required.',
     errorTemplateNameRequired: 'Template name is required.',

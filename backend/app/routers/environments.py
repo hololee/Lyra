@@ -33,6 +33,13 @@ CUSTOM_CONTAINER_PORT_RANGE = (10000, 20000)
 RESERVED_CONTAINER_PORTS = {22, 8080, 8888}
 
 
+def _is_name_unique_violation(error: IntegrityError) -> bool:
+    text = f"{error}".lower()
+    if error.orig is not None:
+        text += f" {error.orig}".lower()
+    return "environments_name_key" in text or ("duplicate key value" in text and "(name)" in text)
+
+
 def _cleanup_expired_jupyter_tickets():
     now = time.time()
     expired = [
@@ -235,6 +242,13 @@ async def create_environment(env: EnvironmentCreate, db: AsyncSession = Depends(
     if not env.dockerfile_content or not env.dockerfile_content.strip():
         raise HTTPException(status_code=400, detail="Dockerfile content is required")
 
+    existing = await db.execute(select(Environment).where(Environment.name == env.name))
+    if existing.scalars().first():
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "duplicate_environment_name", "message": "Environment name already exists"},
+        )
+
     # Real GPU Allocation Logic
     gpu_indices = []
     if env.gpu_count > 0:
@@ -301,8 +315,13 @@ async def create_environment(env: EnvironmentCreate, db: AsyncSession = Depends(
             await db.refresh(candidate_env)
             new_env = candidate_env
             break
-        except IntegrityError:
+        except IntegrityError as error:
             await db.rollback()
+            if _is_name_unique_violation(error):
+                raise HTTPException(
+                    status_code=409,
+                    detail={"code": "duplicate_environment_name", "message": "Environment name already exists"},
+                ) from error
 
     if new_env is None:
         raise HTTPException(

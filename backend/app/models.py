@@ -9,7 +9,7 @@ class Environment(Base):
     __tablename__ = "environments"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    name = Column(String(255), nullable=False)
+    name = Column(String(255), unique=True, nullable=False)
     container_user = Column(String(50), default='root')
     root_password = Column(String(50), nullable=False)
     status = Column(String(50), default='building')  # building, running, stopped, error

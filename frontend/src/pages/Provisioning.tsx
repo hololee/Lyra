@@ -256,6 +256,13 @@ export default function Provisioning() {
       navigate('/');
     } catch (error) {
       console.error("Failed to create environment", error);
+      if (axios.isAxiosError(error) && error.response?.status === 409) {
+        const detail = error.response?.data?.detail;
+        if (detail?.code === 'duplicate_environment_name') {
+          setErrors((prev) => ({ ...prev, name: t('provisioning.errorEnvironmentNameDuplicate') }));
+          return;
+        }
+      }
       showAlert(t('feedback.provisioning.creationFailedTitle'), t('feedback.provisioning.creationFailedMessage'));
     }
   };
