@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { ChevronDown, ChevronUp, Code2, HardDrive, HelpCircle, LayoutTemplate, Network, Play, RefreshCw, Square, SquareTerminal, Trash2, X } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { isValidElement, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useTranslation } from 'react-i18next';
@@ -137,6 +137,124 @@ export default function Dashboard() {
       diagnostics: '',
       recentLogs: text,
     };
+  };
+
+  const preprocessAnnouncementTableCodeBlocks = (markdown: string) => {
+    const lines = String(markdown || '').split('\n');
+    const out: string[] = [];
+    const codeMap: Record<string, { language: string; code: string }> = {};
+    let tokenCounter = 0;
+
+    for (let i = 0; i < lines.length; i += 1) {
+      const line = lines[i];
+      const openFenceIdx = line.indexOf('```');
+      const looksLikeTableRow = line.trimStart().startsWith('|');
+      if (!looksLikeTableRow || openFenceIdx === -1) {
+        out.push(line);
+        continue;
+      }
+
+      const prefix = line.slice(0, openFenceIdx);
+      const language = line
+        .slice(openFenceIdx + 3)
+        .replace(/\|.*$/, '')
+        .trim();
+      let j = i + 1;
+      const codeLines: string[] = [];
+      let restAfterClose = '';
+      let closed = false;
+
+      while (j < lines.length) {
+        const current = lines[j];
+        const closeFenceIdx = current.indexOf('```');
+        if (closeFenceIdx !== -1) {
+          codeLines.push(current.slice(0, closeFenceIdx));
+          restAfterClose = current.slice(closeFenceIdx + 3);
+          closed = true;
+          break;
+        }
+        codeLines.push(current);
+        j += 1;
+      }
+
+      if (!closed) {
+        out.push(line);
+        continue;
+      }
+
+      const token = `LYRATABLECODEBLOCKTOKEN${tokenCounter++}`;
+      codeMap[token] = {
+        language,
+        code: codeLines.join('\n').replace(/\n$/, ''),
+      };
+      out.push(`${prefix}${token}${restAfterClose}`);
+      i = j;
+    }
+
+    return {
+      markdown: out.join('\n'),
+      codeMap,
+    };
+  };
+
+  const extractPlainText = (node: ReactNode): string => {
+    if (node === null || node === undefined || typeof node === 'boolean') return '';
+    if (typeof node === 'string' || typeof node === 'number') return String(node);
+    if (Array.isArray(node)) return node.map(extractPlainText).join('');
+    if (isValidElement<{ children?: ReactNode }>(node)) return extractPlainText(node.props.children);
+    return '';
+  };
+
+  const renderTableCellWithCodeTokens = (
+    raw: string,
+    codeMap: Record<string, { language: string; code: string }>
+  ) => {
+    const segments: ReactNode[] = [];
+    const pattern = /LYRATABLECODEBLOCKTOKEN\d+/g;
+    let cursor = 0;
+    let match: RegExpExecArray | null;
+    let key = 0;
+
+    while ((match = pattern.exec(raw)) !== null) {
+      const before = raw.slice(cursor, match.index);
+      if (before.trim()) {
+        segments.push(
+          <div key={`txt-${key++}`} className="whitespace-pre-wrap text-[var(--text)]">
+            {before.trim()}
+          </div>
+        );
+      }
+
+      const token = match[0];
+      const meta = codeMap[token];
+      if (!meta) {
+        cursor = match.index + token.length;
+        continue;
+      }
+      segments.push(
+        <pre
+          key={`code-${key++}`}
+          className="mt-2 overflow-x-auto rounded-md border border-[var(--border)] bg-[var(--bg-soft)] p-3 text-[12px] leading-6"
+        >
+          <code className={`${meta.language ? `language-${meta.language} ` : ''}font-mono text-[var(--text)]`}>
+            {meta.code}
+          </code>
+        </pre>
+      );
+
+      cursor = match.index + token.length;
+    }
+
+    const after = raw.slice(cursor);
+    if (after.trim()) {
+      segments.push(
+        <div key={`txt-${key++}`} className="whitespace-pre-wrap text-[var(--text)]">
+          {after.trim()}
+        </div>
+      );
+    }
+
+    return segments.length > 0 ? segments : raw;
   };
 
   const fetchEnvironments = async (options: { showLoading?: boolean } = {}) => {
@@ -417,6 +535,10 @@ export default function Dashboard() {
   };
 
   const parsedErrorLog = parseErrorLogSections(errorLog);
+  const announcementRenderData = useMemo(
+    () => preprocessAnnouncementTableCodeBlocks(announcementMarkdown),
+    [announcementMarkdown]
+  );
 
   return (
     <div className="p-6 space-y-6 relative">
@@ -626,13 +748,38 @@ export default function Dashboard() {
 
           {isNoticeOpen && (
             <div className="p-6">
-              <div className="text-sm text-[var(--text)] [&_a]:text-blue-500 [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-[var(--border)] [&_blockquote]:pl-3 [&_code]:rounded [&_code]:bg-[var(--bg-soft)] [&_code]:px-1 [&_h1]:mt-4 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:mt-4 [&_h2]:text-lg [&_h2]:font-semibold [&_li]:ml-5 [&_li]:list-disc [&_p]:mt-2">
+              <div className="text-sm text-[var(--text)] [&_a]:text-blue-500 [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-[var(--border)] [&_blockquote]:pl-3 [&_h1]:mt-4 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:mt-4 [&_h2]:text-lg [&_h2]:font-semibold [&_li]:ml-5 [&_li]:list-disc [&_p]:mt-2">
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   components={{
                     a: ({ ...props }) => (
                       <a {...props} target="_blank" rel="noopener noreferrer" />
                     ),
+                    pre: ({ ...props }) => (
+                      <pre
+                        {...props}
+                        className="my-3 overflow-x-auto rounded-md border border-[var(--border)] bg-[var(--bg-soft)] p-3 text-[12px] leading-6"
+                      />
+                    ),
+                    code: ({ children, className, ...props }) => {
+                      const inlineHint = (props as { inline?: boolean }).inline;
+                      const text = extractPlainText(children);
+                      const isBlockCode =
+                        inlineHint === false || Boolean(className) || text.includes('\n');
+
+                      if (!isBlockCode) {
+                        return (
+                          <code className="rounded-md border border-[var(--border)] bg-[var(--bg-soft)] px-[0.35em] py-[0.15em] font-mono text-[0.92em] text-[var(--text)]">
+                            {children}
+                          </code>
+                        );
+                      }
+                      return (
+                        <code className={`${className || ''} font-mono text-[var(--text)]`}>
+                          {children}
+                        </code>
+                      );
+                    },
                     table: ({ ...props }) => (
                       <div className="my-3 overflow-x-auto">
                         <table {...props} className="w-full min-w-[420px] border-collapse text-left text-sm" />
@@ -640,10 +787,18 @@ export default function Dashboard() {
                     ),
                     thead: ({ ...props }) => <thead {...props} className="bg-[var(--bg-soft)]" />,
                     th: ({ ...props }) => <th {...props} className="border border-[var(--border)] px-3 py-2 font-semibold text-[var(--text)]" />,
-                    td: ({ ...props }) => <td {...props} className="border border-[var(--border)] px-3 py-2 text-[var(--text)]" />,
+                    td: ({ children, ...props }) => {
+                      const raw = extractPlainText(children);
+                      const hasToken = /LYRATABLECODEBLOCKTOKEN\d+/.test(raw);
+                      return (
+                        <td {...props} className="border border-[var(--border)] px-3 py-2 align-top text-[var(--text)]">
+                          {hasToken ? renderTableCellWithCodeTokens(raw, announcementRenderData.codeMap) : children}
+                        </td>
+                      );
+                    },
                   }}
                 >
-                  {announcementMarkdown}
+                  {announcementRenderData.markdown}
                 </ReactMarkdown>
               </div>
             </div>
