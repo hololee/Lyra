@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .database import engine, Base
-from .routers import environments, terminal, resources, settings, templates, filesystem, worker_api
+from .routers import environments, terminal, resources, settings, templates, filesystem, worker_api, worker_servers
 from .models import Setting
 from .core.security import require_secret_key
 from sqlalchemy.future import select
@@ -62,3 +62,4 @@ app.include_router(settings.router, prefix="/api")
 app.include_router(templates.router, prefix="/api")
 app.include_router(filesystem.router, prefix="/api")
 app.include_router(worker_api.router, prefix="/api")
+app.include_router(worker_servers.router, prefix="/api")

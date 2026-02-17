@@ -86,3 +86,32 @@ class TemplateResponse(TemplateBase):
 
     class Config:
         from_attributes = True
+
+
+class WorkerServerBase(BaseModel):
+    name: str
+    base_url: str
+    is_active: bool = True
+
+
+class WorkerServerCreate(WorkerServerBase):
+    api_token: str
+
+
+class WorkerServerUpdate(BaseModel):
+    name: Optional[str] = None
+    base_url: Optional[str] = None
+    api_token: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+class WorkerServerResponse(WorkerServerBase):
+    id: UUID
+    last_health_status: str
+    last_health_checked_at: Optional[datetime] = None
+    last_error_message: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
