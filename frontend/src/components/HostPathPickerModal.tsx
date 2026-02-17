@@ -2,6 +2,7 @@ import axios from 'axios';
 import { ChevronUp, Folder, Loader2, RefreshCw, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import OverlayPortal from './OverlayPortal';
 
 interface HostPathEntry {
   name: string;
@@ -158,7 +159,7 @@ export default function HostPathPickerModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--overlay)] p-4 backdrop-blur-sm">
+    <OverlayPortal className="p-4">
       <div className="w-full max-w-3xl rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-2xl animate-in fade-in zoom-in duration-200">
         <div className="flex items-center justify-between border-b border-[var(--border)] p-5">
           <h3 className="text-lg font-bold text-[var(--text)]">{t('provisioning.hostPathBrowseTitle')}</h3>
@@ -257,6 +258,6 @@ export default function HostPathPickerModal({
           </button>
         </div>
       </div>
-    </div>
+    </OverlayPortal>
   );
 }

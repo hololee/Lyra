@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import HostPathPickerModal from '../components/HostPathPickerModal';
 import Modal from '../components/Modal';
+import OverlayPortal from '../components/OverlayPortal';
 import { useTheme } from '../context/ThemeContext';
 import { useToast } from '../context/ToastContext';
 
@@ -590,7 +591,7 @@ export default function Provisioning() {
 
       {/* Save Template Modal */}
       {isSaveModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--overlay)] backdrop-blur-sm">
+        <OverlayPortal>
             <div className="bg-[var(--bg-elevated)] rounded-xl border border-[var(--border)] shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
                 <div className="p-6 space-y-4">
                     <h3 className="text-xl font-bold text-[var(--text)]">{t('provisioning.saveAsTemplate')}</h3>
@@ -644,7 +645,7 @@ export default function Provisioning() {
                     </button>
                 </div>
             </div>
-        </div>
+        </OverlayPortal>
       )}
 
       <header className="flex justify-between items-center">
@@ -1036,7 +1037,7 @@ export default function Provisioning() {
 
       {/* Load Template Modal */}
       {isLoadModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--overlay)] backdrop-blur-sm">
+        <OverlayPortal>
             <div className="bg-[var(--bg-elevated)] rounded-xl border border-[var(--border)] shadow-2xl w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in duration-200 flex flex-col max-h-[80vh]">
                 <div className="p-6 border-b border-[var(--border)] flex justify-between items-center">
                     <h3 className="text-xl font-bold text-[var(--text)]">{t('provisioning.loadTemplateTitle')}</h3>
@@ -1095,7 +1096,7 @@ export default function Provisioning() {
                     </button>
                 </div>
             </div>
-        </div>
+        </OverlayPortal>
       )}
     </div>
   );
