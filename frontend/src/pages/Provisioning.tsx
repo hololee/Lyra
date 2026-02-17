@@ -273,9 +273,8 @@ export default function Provisioning() {
       };
 
       // Step 1: check required SSH settings exist.
-      const [sshHost, sshPort, sshUser, authMethodRaw] = await Promise.all([
+      const [sshHost, sshUser, authMethodRaw] = await Promise.all([
         fetchSettingValue('ssh_host'),
-        fetchSettingValue('ssh_port'),
         fetchSettingValue('ssh_username'),
         fetchSettingValue('ssh_auth_method'),
       ]);
@@ -302,7 +301,8 @@ export default function Provisioning() {
         }
       }
 
-      const hasBasic = Boolean(sshHost && sshPort && sshUser && authMethod);
+      // Backend defaults missing ssh_port to 22, so port is not required in frontend precheck.
+      const hasBasic = Boolean(sshHost && sshUser && authMethod);
       const hasAuth = authMethod === 'password' ? Boolean(sshPassword) : Boolean(browsePrivateKey);
       if (!hasBasic || !hasAuth) {
         setMountError(index, t('provisioning.errorHostConnectionSettingsRequired'), true);
