@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { ChevronDown, ChevronUp, Code2, HardDrive, HelpCircle, LayoutTemplate, Network, Play, RefreshCw, Square, SquareTerminal, Trash2, X } from 'lucide-react';
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useTranslation } from 'react-i18next';
@@ -44,6 +44,7 @@ interface Environment {
 const ENVS_CACHE_KEY = 'lyra.dashboard.environments';
 const TERMINAL_ACTION_QUEUE_KEY = 'lyra.terminal.pending_action';
 const NOTICE_OPEN_KEY = 'lyra.dashboard.notice_open';
+const MIN_REFRESH_SPIN_MS = 900;
 
 export default function Dashboard() {
   const { showToast } = useToast();
@@ -87,6 +88,8 @@ export default function Dashboard() {
   const [logLoading, setLogLoading] = useState(false);
   const [workerErrorInfo, setWorkerErrorInfo] = useState<{ name: string; message: string } | null>(null);
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
+  const [isRefreshSpinning, setIsRefreshSpinning] = useState(false);
+  const refreshRequestIdRef = useRef(0);
   const getWorkerErrorText = (code?: string | null, fallback?: string | null) => {
     if (code) {
       const key = `dashboard.workerError.${code}`;
@@ -103,9 +106,12 @@ export default function Dashboard() {
 
   const fetchEnvironments = async (options: { showLoading?: boolean } = {}) => {
     const { showLoading = false } = options;
+    const requestId = showLoading ? ++refreshRequestIdRef.current : refreshRequestIdRef.current;
+    const startedAt = showLoading ? Date.now() : 0;
 
     if (showLoading) {
       setLoading(true);
+      setIsRefreshSpinning(true);
     }
 
     try {
@@ -121,6 +127,14 @@ export default function Dashboard() {
       console.error("Failed to fetch environments", error);
     } finally {
       if (showLoading) {
+        const elapsed = Date.now() - startedAt;
+        const remaining = Math.max(0, MIN_REFRESH_SPIN_MS - elapsed);
+        if (remaining > 0) {
+          await new Promise((resolve) => setTimeout(resolve, remaining));
+        }
+        if (requestId === refreshRequestIdRef.current) {
+          setIsRefreshSpinning(false);
+        }
         setLoading(false);
       }
     }
@@ -591,7 +605,7 @@ export default function Dashboard() {
               onClick={() => fetchEnvironments({ showLoading: true })}
               className="p-2 hover:bg-[var(--bg-soft)] rounded-full text-[var(--text-muted)] transition-colors"
             >
-                <RefreshCw size={18} className={loading && hasLoadedOnce ? "animate-spin" : ""} />
+                <RefreshCw size={18} className={isRefreshSpinning && hasLoadedOnce ? "animate-spin" : ""} />
             </button>
         </div>
         <div className="w-full overflow-x-auto text-left">
