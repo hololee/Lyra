@@ -31,6 +31,7 @@ const enCommon = {
   labels: {
     name: 'Name',
     status: 'Status',
+    server: 'Server',
     actions: 'Actions',
     gpu: 'GPU',
     access: 'Access',
@@ -88,9 +89,13 @@ const enCommon = {
     environmentMustBeRunning: 'Environment must be running (port: {{port}})',
     openJupyterLab: 'Open Jupyter Lab',
     openCodeServer: 'Open code-server',
+    hostServer: 'Host',
     hostLabel: 'Host',
     destinationLabel: 'Dest',
     portLabel: 'Port',
+    workerUnavailableTitle: 'Worker Unreachable',
+    workerUnavailableFor: 'Unable to contact worker server for {{name}}.',
+    viewWorkerError: 'View worker connectivity error',
   },
   provisioning: {
     title: 'Provisioning',

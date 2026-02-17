@@ -31,6 +31,7 @@ const koCommon = {
   labels: {
     name: '이름',
     status: '상태',
+    server: '서버',
     actions: '동작',
     gpu: 'GPU',
     access: '접속',
@@ -87,9 +88,13 @@ const koCommon = {
     environmentMustBeRunning: '환경이 실행 중이어야 합니다 (포트: {{port}})',
     openJupyterLab: 'Jupyter Lab 열기',
     openCodeServer: 'code-server 열기',
+    hostServer: '호스트',
     hostLabel: '호스트',
     destinationLabel: '대상',
     portLabel: '포트',
+    workerUnavailableTitle: '워커 접속 불가',
+    workerUnavailableFor: '{{name}} 환경의 워커 서버에 연결할 수 없습니다.',
+    viewWorkerError: '워커 연결 오류 보기',
   },
   provisioning: {
     title: '프로비저닝',

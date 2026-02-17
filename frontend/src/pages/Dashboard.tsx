@@ -25,6 +25,8 @@ interface Environment {
   id: string;
   name: string;
   status: string;
+  worker_server_name?: string | null;
+  worker_error_message?: string | null;
   container_user?: string;
   gpu_indices: number[];
   container_id?: string;
@@ -82,6 +84,7 @@ export default function Dashboard() {
   const [errorLogEnv, setErrorLogEnv] = useState<Environment | null>(null);
   const [errorLog, setErrorLog] = useState<string>("");
   const [logLoading, setLogLoading] = useState(false);
+  const [workerErrorInfo, setWorkerErrorInfo] = useState<{ name: string; message: string } | null>(null);
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
   const getStatusLabel = (status: string) => {
     const key = `status.${status}`;
@@ -487,6 +490,34 @@ export default function Dashboard() {
         </OverlayPortal>
       )}
 
+      {workerErrorInfo && (
+        <OverlayPortal>
+          <div className="bg-[var(--bg-elevated)] rounded-xl border border-[var(--border)] shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="p-6 border-b border-[var(--border)] flex justify-between items-center">
+              <h3 className="text-xl font-bold text-[var(--text)] flex items-center gap-2">
+                <HelpCircle size={20} className="text-yellow-400" />
+                {t('dashboard.workerUnavailableTitle')}
+              </h3>
+              <button onClick={() => setWorkerErrorInfo(null)} className="text-[var(--text-muted)] hover:text-[var(--text)] transition-colors">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6 space-y-2">
+              <p className="text-sm text-[var(--text-muted)]">{t('dashboard.workerUnavailableFor', { name: workerErrorInfo.name })}</p>
+              <p className="text-sm text-[var(--text)]">{workerErrorInfo.message}</p>
+            </div>
+            <div className="p-4 border-t border-[var(--border)] bg-[var(--bg-soft)] flex justify-end">
+              <button
+                onClick={() => setWorkerErrorInfo(null)}
+                className="px-4 py-2 rounded-lg text-sm font-medium border border-[var(--border)] bg-[var(--bg-soft)] text-[var(--text)] hover:brightness-95 transition-all"
+              >
+                {t('actions.close')}
+              </button>
+            </div>
+          </div>
+        </OverlayPortal>
+      )}
+
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-3xl font-bold text-[var(--text)]">{t('dashboard.title')}</h2>
@@ -561,6 +592,7 @@ export default function Dashboard() {
                         <tr>
                             <th className="px-6 py-4 font-medium">{t('labels.name')}</th>
                             <th className="px-6 py-4 font-medium">{t('labels.status')}</th>
+                            <th className="px-6 py-4 font-medium">{t('labels.server')}</th>
                             <th className="px-6 py-4 font-medium">{t('labels.access')}</th>
                             <th className="px-6 py-4 font-medium">{t('labels.gpu')}</th>
                             <th className="px-6 py-4 font-medium text-right">{t('labels.actions')}</th>
@@ -605,14 +637,28 @@ export default function Dashboard() {
                                         </span>
                                         {env.status === 'error' && (
                                             <button
-                                                onClick={() => setErrorLogEnv(env)}
+                                                onClick={() => {
+                                                  if (env.worker_server_name && env.worker_error_message) {
+                                                    setWorkerErrorInfo({
+                                                      name: env.name,
+                                                      message: env.worker_error_message,
+                                                    });
+                                                    return;
+                                                  }
+                                                  setErrorLogEnv(env);
+                                                }}
                                                 className="text-red-400 hover:text-red-300 transition-colors"
-                                                title={t('dashboard.viewErrorLogs')}
+                                                title={env.worker_server_name && env.worker_error_message
+                                                  ? t('dashboard.viewWorkerError')
+                                                  : t('dashboard.viewErrorLogs')}
                                             >
                                                 <HelpCircle size={16} />
                                             </button>
                                         )}
                                     </div>
+                                </td>
+                                <td className="px-6 py-4 text-[var(--text)]">
+                                  {env.worker_server_name || t('dashboard.hostServer')}
                                 </td>
                                 <td className="px-6 py-4 text-[var(--text)]">
                                     {renderAccessCell(env)}

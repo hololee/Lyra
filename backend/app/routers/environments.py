@@ -709,6 +709,7 @@ async def read_environments(skip: int = 0, limit: int = 100, db: AsyncSession = 
         worker_map = {worker.id: worker for worker in workers}
 
     worker_health_cache: dict[UUID, bool] = {}
+    worker_health_message_cache: dict[UUID, str] = {}
     status_changed = False
 
     client = None
@@ -737,6 +738,8 @@ async def read_environments(skip: int = 0, limit: int = 100, db: AsyncSession = 
                     status_changed = True
                 env_dict = {
                     **env.__dict__,
+                    "worker_server_name": None,
+                    "worker_error_message": "Worker server not found",
                     "container_id": None,
                     "custom_ports": custom_ports_map.get(str(env.id), []),
                 }
@@ -749,6 +752,7 @@ async def read_environments(skip: int = 0, limit: int = 100, db: AsyncSession = 
                 health = await refresh_worker_health(db, worker)
                 healthy = health.status == WORKER_HEALTH_HEALTHY
                 worker_health_cache[worker.id] = healthy
+                worker_health_message_cache[worker.id] = health.message
 
             if not healthy:
                 if env.status != "error":
@@ -756,6 +760,8 @@ async def read_environments(skip: int = 0, limit: int = 100, db: AsyncSession = 
                     status_changed = True
                 env_dict = {
                     **env.__dict__,
+                    "worker_server_name": worker.name,
+                    "worker_error_message": worker_health_message_cache.get(worker.id) or "Worker server is unreachable",
                     "container_id": None,
                     "custom_ports": custom_ports_map.get(str(env.id), []),
                 }
@@ -780,10 +786,15 @@ async def read_environments(skip: int = 0, limit: int = 100, db: AsyncSession = 
                 if env.status != "error":
                     env.status = "error"
                     status_changed = True
+                worker_error_message = "Failed to fetch environment state from worker"
                 container_id = None
+            else:
+                worker_error_message = None
 
             env_dict = {
                 **env.__dict__,
+                "worker_server_name": worker.name,
+                "worker_error_message": worker_error_message,
                 "container_id": container_id,
                 "custom_ports": custom_ports_map.get(str(env.id), []),
             }
@@ -826,6 +837,8 @@ async def read_environments(skip: int = 0, limit: int = 100, db: AsyncSession = 
 
         env_dict = {
             **env.__dict__,
+            "worker_server_name": None,
+            "worker_error_message": None,
             "container_id": container_id,
             "custom_ports": custom_ports_map.get(str(env.id), []),
         }
@@ -845,9 +858,13 @@ async def read_environment(environment_id: str, db: AsyncSession = Depends(get_d
     if env is None:
         raise HTTPException(status_code=404, detail="Environment not found")
 
+    worker_server_name = None
+    worker_error_message = None
+
     if env.worker_server_id:
         worker = await _get_worker_server_by_id(db, env.worker_server_id)
         if worker:
+            worker_server_name = worker.name
             try:
                 remote_env = await call_worker_api(
                     worker,
@@ -862,13 +879,20 @@ async def read_environment(environment_id: str, db: AsyncSession = Depends(get_d
                 if env.status != "error":
                     env.status = "error"
                     await db.commit()
+                worker_error_message = "Failed to fetch environment state from worker"
         else:
             if env.status != "error":
                 env.status = "error"
                 await db.commit()
+            worker_error_message = "Worker server not found"
 
     custom_ports = await _get_custom_ports_for_environment(db, str(env.id))
-    env_dict = {**env.__dict__, "custom_ports": custom_ports}
+    env_dict = {
+        **env.__dict__,
+        "custom_ports": custom_ports,
+        "worker_server_name": worker_server_name,
+        "worker_error_message": worker_error_message,
+    }
     env_dict.pop("_sa_instance_state", None)
     return env_dict
 

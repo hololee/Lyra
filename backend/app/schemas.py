@@ -40,6 +40,8 @@ class EnvironmentResponse(EnvironmentBase):
     ssh_port: int
     jupyter_port: int
     code_port: int
+    worker_server_name: Optional[str] = None
+    worker_error_message: Optional[str] = None
     created_at: datetime
     container_id: str | None = None
 
