@@ -1,5 +1,6 @@
 import { Route, BrowserRouter as Router, Routes } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
+import UserNameGuard from './components/UserNameGuard';
 import { AppProvider } from './context/AppContext';
 import Dashboard from './pages/Dashboard';
 import Provisioning from './pages/Provisioning';
@@ -19,9 +20,9 @@ function App() {
         <main className="flex-1 overflow-auto overscroll-contain bg-[var(--surface)]">
           <Routes>
             <Route path="/" element={<Dashboard />} />
-            <Route path="/provisioning" element={<Provisioning />} />
-            <Route path="/terminal" element={<TerminalPage />} />
-            <Route path="/templates" element={<Templates />} />
+            <Route path="/provisioning" element={<UserNameGuard><Provisioning /></UserNameGuard>} />
+            <Route path="/terminal" element={<UserNameGuard><TerminalPage /></UserNameGuard>} />
+            <Route path="/templates" element={<UserNameGuard><Templates /></UserNameGuard>} />
             <Route path="/settings" element={<Settings />} />
           </Routes>
         </main>

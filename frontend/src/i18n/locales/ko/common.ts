@@ -226,6 +226,11 @@ const koCommon = {
     tmuxInstallSuccess: 'tmux 설치가 완료되었습니다. 새 탭부터 세션 복구가 적용됩니다.',
     tmuxInstallFailed: 'tmux 설치에 실패했습니다. 기본 fallback 모드(비지속 세션)로 동작합니다.',
   },
+  auth: {
+    userNameRequiredTitle: '유저명 설정 필요',
+    userNameRequiredMessage: '이 페이지에 접근하려면 설정에서 유저명을 먼저 등록해야 합니다.',
+    goToSettings: '설정으로 이동',
+  },
   settings: {
     title: '설정',
     subtitle: '애플리케이션 환경설정과 호스트 접근을 관리합니다',

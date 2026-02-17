@@ -228,6 +228,11 @@ const enCommon = {
     tmuxInstallSuccess: 'tmux installed successfully. New tabs will use persistent sessions.',
     tmuxInstallFailed: 'Failed to install tmux. Fallback mode (non-persistent) will be used.',
   },
+  auth: {
+    userNameRequiredTitle: 'User Name Required',
+    userNameRequiredMessage: 'User Name must be configured in Settings before accessing this page.',
+    goToSettings: 'Go to Settings',
+  },
   settings: {
     title: 'Settings',
     subtitle: 'Configure your application preferences and host access',
