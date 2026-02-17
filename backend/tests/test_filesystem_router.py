@@ -53,6 +53,14 @@ class _FakeSshClient:
         self.closed = True
 
 
+def test_normalize_host_path_validation_cases():
+    assert fs_router._normalize_host_path("") == "/"
+    assert fs_router._normalize_host_path("   ") == "/"
+    assert fs_router._normalize_host_path(".") == "/"
+    assert fs_router._normalize_host_path("tmp/data") == "/tmp/data"
+    assert fs_router._normalize_host_path("/tmp/../var//log") == "/var/log"
+
+
 def test_list_host_directory_success_sorted_and_truncated(monkeypatch):
     output = "\n".join(
         [
@@ -86,6 +94,34 @@ def test_list_host_directory_success_sorted_and_truncated(monkeypatch):
     assert ssh_client.closed is True
 
 
+def test_list_host_directory_normalizes_relative_request_path(monkeypatch):
+    output = "\n".join(
+        [
+            "__PATH__:/tmp/work",
+            "a-dir\t/tmp/work/a-dir\td\t1\t1",
+        ]
+    )
+    ssh_client = _FakeSshClient(out=output)
+
+    async def _fake_connect_host_ssh(_db, **_kwargs):
+        return ssh_client
+
+    monkeypatch.setattr(fs_router, "connect_host_ssh", _fake_connect_host_ssh)
+
+    result = asyncio.run(
+        fs_router.list_host_directory(
+            req=fs_router.HostFsListRequest(path="tmp/work"),
+            db=object(),
+        )
+    )
+
+    assert result["status"] == "success"
+    assert result["path"] == "/tmp/work"
+    assert result["parent"] == "/tmp"
+    assert result["entries"][0]["path"] == "/tmp/work/a-dir"
+    assert ssh_client.closed is True
+
+
 def test_list_host_directory_returns_path_not_found(monkeypatch):
     ssh_client = _FakeSshClient(out="__ERR__:NOT_FOUND")
 
@@ -97,6 +133,26 @@ def test_list_host_directory_returns_path_not_found(monkeypatch):
     result = asyncio.run(
         fs_router.list_host_directory(
             req=fs_router.HostFsListRequest(path="/nope"),
+            db=object(),
+        )
+    )
+
+    assert result["status"] == "error"
+    assert result["code"] == "path_not_found"
+    assert ssh_client.closed is True
+
+
+def test_list_host_directory_returns_not_directory_as_path_not_found(monkeypatch):
+    ssh_client = _FakeSshClient(out="__ERR__:NOT_DIRECTORY")
+
+    async def _fake_connect_host_ssh(_db, **_kwargs):
+        return ssh_client
+
+    monkeypatch.setattr(fs_router, "connect_host_ssh", _fake_connect_host_ssh)
+
+    result = asyncio.run(
+        fs_router.list_host_directory(
+            req=fs_router.HostFsListRequest(path="/tmp/file.txt"),
             db=object(),
         )
     )
