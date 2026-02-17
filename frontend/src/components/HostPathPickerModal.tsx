@@ -133,13 +133,13 @@ export default function HostPathPickerModal({
   if (!isOpen) return null;
 
   const getErrorText = () => {
-    if (errorCode === 'ssh_not_configured') return t('provisioning.hostPathPickerErrorSshNotConfigured');
-    if (errorCode === 'path_not_found') return t('provisioning.hostPathPickerErrorPathNotFound');
-    if (errorCode === 'permission_denied') return t('provisioning.hostPathPickerErrorPermissionDenied');
-    if (errorCode === 'ssh_auth_failed') return t('provisioning.hostPathPickerErrorAuthFailed');
-    if (errorCode === 'ssh_host_key_failed') return t('provisioning.hostPathPickerErrorHostKeyFailed');
-    if (errorMessage) return `${t('provisioning.hostPathPickerErrorGeneric')}: ${errorMessage}`;
-    return t('provisioning.hostPathPickerErrorGeneric');
+    if (errorCode === 'ssh_not_configured') return t('provisioning.errorHostConnectionSettingsRequired');
+    if (errorCode === 'ssh_auth_failed') return t('provisioning.errorHostConnectionAuthFailed');
+    if (errorCode === 'ssh_host_key_failed') return t('provisioning.errorHostConnectionHostKeyFailed');
+    if (errorCode === 'path_not_found') return t('provisioning.errorHostPathNotFound');
+    if (errorCode === 'permission_denied') return t('provisioning.errorHostPathPermissionDenied');
+    if (errorMessage) return `${t('provisioning.errorHostPathBrowseFailed')}: ${errorMessage}`;
+    return t('provisioning.errorHostPathBrowseFailed');
   };
 
   const handleMoveToParent = () => {
@@ -161,7 +161,7 @@ export default function HostPathPickerModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--overlay)] p-4 backdrop-blur-sm">
       <div className="w-full max-w-3xl rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-2xl animate-in fade-in zoom-in duration-200">
         <div className="flex items-center justify-between border-b border-[var(--border)] p-5">
-          <h3 className="text-lg font-bold text-[var(--text)]">{t('provisioning.hostPathPickerTitle')}</h3>
+          <h3 className="text-lg font-bold text-[var(--text)]">{t('provisioning.hostPathBrowseTitle')}</h3>
           <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text)] transition-colors">
             <X size={18} />
           </button>
@@ -176,7 +176,7 @@ export default function HostPathPickerModal({
               className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-xs text-[var(--text)] disabled:opacity-40 disabled:cursor-not-allowed hover:brightness-95"
             >
               <ChevronUp size={14} />
-              {t('provisioning.hostPathPickerParent')}
+              {t('provisioning.hostPathBrowseParent')}
             </button>
             <button
               type="button"
@@ -190,12 +190,12 @@ export default function HostPathPickerModal({
           </div>
 
           <div className="rounded-md border border-[var(--border)] bg-[var(--bg-soft)] px-3 py-2">
-            <div className="text-[10px] uppercase tracking-wide text-[var(--text-muted)]">{t('provisioning.hostPathPickerCurrentPath')}</div>
+            <div className="text-[10px] uppercase tracking-wide text-[var(--text-muted)]">{t('provisioning.hostPathBrowseCurrentPath')}</div>
             <div className="text-sm font-mono text-[var(--text)] break-all">{currentPath}</div>
           </div>
 
           {truncated && (
-            <p className="text-xs text-amber-500">{t('provisioning.hostPathPickerTruncated')}</p>
+            <p className="text-xs text-amber-500">{t('provisioning.hostPathBrowseTruncated')}</p>
           )}
 
           {errorCode ? (
@@ -208,13 +208,13 @@ export default function HostPathPickerModal({
                 <div className="absolute inset-0 z-10 flex items-center justify-center bg-[var(--bg-soft)]/75 backdrop-blur-[1px]">
                   <span className="inline-flex items-center gap-2 text-sm text-[var(--text)]">
                     <Loader2 size={14} className="animate-spin" />
-                    {t('provisioning.hostPathPickerLoading')}
+                    {t('provisioning.hostPathBrowseLoading')}
                   </span>
                 </div>
               )}
               {entries.length === 0 ? (
                 <div className="h-full min-h-[320px] flex items-center justify-center text-sm text-[var(--text-muted)]">
-                  {t('provisioning.hostPathPickerNoDirectories')}
+                  {t('provisioning.hostPathBrowseNoDirectories')}
                 </div>
               ) : (
                 <ul className="divide-y divide-[var(--border)]">
@@ -253,7 +253,7 @@ export default function HostPathPickerModal({
             disabled={Boolean(errorCode) || isLoading || !selectedPath}
             className="rounded-lg bg-[var(--primary)] px-4 py-2 text-sm text-[var(--primary-contrast)] disabled:opacity-40 disabled:cursor-not-allowed hover:brightness-110 transition-colors"
           >
-            {t('provisioning.hostPathPickerSelect')}
+            {t('provisioning.hostPathBrowseSelect')}
           </button>
         </div>
       </div>

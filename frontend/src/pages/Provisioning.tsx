@@ -238,12 +238,12 @@ export default function Provisioning() {
   };
 
   const getBrowseErrorMessage = (code?: string, fallbackMessage?: string) => {
-    if (code === 'ssh_not_configured') return { message: t('provisioning.hostPathBrowseErrorSettingsRequired'), settings: true };
-    if (code === 'ssh_auth_failed') return { message: t('provisioning.hostPathBrowseErrorAuthFailed'), settings: true };
-    if (code === 'ssh_host_key_failed') return { message: t('provisioning.hostPathBrowseErrorHostKeyFailed'), settings: true };
-    if (code === 'permission_denied') return { message: t('provisioning.hostPathBrowseErrorPermissionDenied'), settings: false };
-    if (code === 'path_not_found') return { message: t('provisioning.hostPathBrowseErrorPathNotFound'), settings: false };
-    return { message: fallbackMessage || t('provisioning.hostPathBrowseErrorUnknown'), settings: false };
+    if (code === 'ssh_not_configured') return { message: t('provisioning.errorHostConnectionSettingsRequired'), settings: true };
+    if (code === 'ssh_auth_failed') return { message: t('provisioning.errorHostConnectionAuthFailed'), settings: true };
+    if (code === 'ssh_host_key_failed') return { message: t('provisioning.errorHostConnectionHostKeyFailed'), settings: true };
+    if (code === 'permission_denied') return { message: t('provisioning.errorHostPathPermissionDenied'), settings: false };
+    if (code === 'path_not_found') return { message: t('provisioning.errorHostPathNotFound'), settings: false };
+    return { message: fallbackMessage || t('provisioning.errorHostConnectionUnknown'), settings: false };
   };
 
   const handleOpenHostPathPicker = async (index: number) => {
@@ -272,7 +272,7 @@ export default function Provisioning() {
       const hasBasic = Boolean(sshHost && sshPort && sshUser && authMethod);
       const hasAuth = authMethod === 'password' ? Boolean(sshPassword) : true;
       if (!hasBasic || !hasAuth) {
-        setMountError(index, t('provisioning.hostPathBrowseErrorSettingsRequired'), true);
+        setMountError(index, t('provisioning.errorHostConnectionSettingsRequired'), true);
         return;
       }
 
@@ -835,7 +835,7 @@ export default function Provisioning() {
                               className="absolute right-1.5 top-1/2 -translate-y-1/2 inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--bg-soft)] px-2 py-1 text-[10px] text-[var(--text)] hover:brightness-95 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                             >
                               {checkingBrowseIndex === idx ? <Loader2 size={10} className="animate-spin" /> : null}
-                              {t('provisioning.browse')}
+                              {t('provisioning.hostPathBrowseButton')}
                             </button>
                         </div>
                         <button
