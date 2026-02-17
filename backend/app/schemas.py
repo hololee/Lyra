@@ -17,6 +17,7 @@ class CustomPortMapping(BaseModel):
 
 class EnvironmentBase(BaseModel):
     name: str = Field(pattern=r"^[a-zA-Z0-9-]+$")
+    worker_server_id: Optional[UUID] = None
     container_user: str = "root"
     dockerfile_content: Optional[str] = None
     enable_jupyter: bool = True
@@ -39,6 +40,9 @@ class EnvironmentResponse(EnvironmentBase):
     ssh_port: int
     jupyter_port: int
     code_port: int
+    worker_server_name: Optional[str] = None
+    worker_error_code: Optional[str] = None
+    worker_error_message: Optional[str] = None
     created_at: datetime
     container_id: str | None = None
 
@@ -82,6 +86,35 @@ class TemplateCreate(TemplateBase):
 class TemplateResponse(TemplateBase):
     id: UUID
     created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class WorkerServerBase(BaseModel):
+    name: str
+    base_url: str
+    is_active: bool = True
+
+
+class WorkerServerCreate(WorkerServerBase):
+    api_token: str
+
+
+class WorkerServerUpdate(BaseModel):
+    name: Optional[str] = None
+    base_url: Optional[str] = None
+    api_token: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+class WorkerServerResponse(WorkerServerBase):
+    id: UUID
+    last_health_status: str
+    last_health_checked_at: Optional[datetime] = None
+    last_error_message: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

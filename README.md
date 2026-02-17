@@ -36,6 +36,16 @@ docker-compose up -d --build
 docker-compose -f docker-compose.gpu.yml up -d --build
 ```
 
+**Worker Node Only (no frontend):**
+```bash
+docker compose -f docker-compose.worker.yml up -d --build
+```
+
+**Worker Node Only + GPU:**
+```bash
+docker compose -f docker-compose.worker.gpu.yml up -d --build
+```
+
 - **Frontend**: [http://localhost](http://localhost)
 - **Backend API**: [http://localhost:8000](http://localhost:8000)
 - **API Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
@@ -82,6 +92,22 @@ GPU hosts:
 docker compose -f docker-compose.gpu.yml up -d --build
 ```
 
+Worker-only hosts:
+```bash
+docker compose -f docker-compose.worker.yml up -d --build
+# or (GPU)
+docker compose -f docker-compose.worker.gpu.yml up -d --build
+```
+
+Worker node required env:
+- `LYRA_NODE_ROLE=worker`
+
+Worker token policy:
+- When worker backend starts, Lyra generates a runtime worker API token and prints it in logs as plaintext.
+- Main server must use that token value when registering the worker server.
+- Token is persisted in Docker named volume `worker_runtime_data` and reused across worker restarts.
+- If you remove `worker_runtime_data`, a new token is generated on next worker startup.
+
 4. Verify containers:
 ```bash
 docker compose ps
@@ -104,6 +130,7 @@ docker compose ps
 ├── .github/workflows/     # GitHub Actions CI/CD pipelines
 ├── .pre-commit-config.yaml# Local CI check configuration
 └── docker-compose.yml     # Service orchestration
+└── docker-compose.worker.yml / docker-compose.worker.gpu.yml # Worker-only deployment
 ```
 
 ---

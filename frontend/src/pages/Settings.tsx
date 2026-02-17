@@ -11,6 +11,28 @@ import { getStoredUserName, setStoredUserName } from '../utils/userIdentity';
 
 type StatusState = { type: 'idle' | 'loading' | 'success' | 'error'; message?: string };
 type TmuxSession = { name: string; attached: number; windows: number };
+type WorkerServer = {
+  id: string;
+  name: string;
+  base_url: string;
+  is_active: boolean;
+  last_health_status: string;
+  last_health_checked_at?: string | null;
+  last_error_message?: string | null;
+};
+
+const getApiErrorCodeAndMessage = (error: unknown): { code: string; message: string } => {
+  if (!axios.isAxiosError(error)) {
+    return { code: '', message: error instanceof Error ? error.message : String(error) };
+  }
+  const detail = error.response?.data?.detail;
+  if (detail && typeof detail === 'object') {
+    const code = String((detail as { code?: unknown }).code || '').trim();
+    const message = String((detail as { message?: unknown }).message || '').trim();
+    return { code, message };
+  }
+  return { code: '', message: String(error.message || '') };
+};
 
 export default function Settings() {
   const {
@@ -34,8 +56,17 @@ export default function Settings() {
   const [sshStatus, setSshStatus] = useState<StatusState>({ type: 'idle' });
   const [resourceStatus, setResourceStatus] = useState<StatusState>({ type: 'idle' });
   const [sessionStatus, setSessionStatus] = useState<StatusState>({ type: 'idle' });
+  const [workerStatus, setWorkerStatus] = useState<StatusState>({ type: 'idle' });
   const [announcementEditorOpen, setAnnouncementEditorOpen] = useState(false);
   const [announcementDraft, setAnnouncementDraft] = useState('');
+  const [workerServers, setWorkerServers] = useState<WorkerServer[]>([]);
+  const [workerLoading, setWorkerLoading] = useState(false);
+  const [workerForm, setWorkerForm] = useState({
+    name: '',
+    base_url: '',
+    api_token: '',
+    is_active: true,
+  });
 
   // SSH Settings State
   const [sshSettings, setSshSettings] = useState({
@@ -107,6 +138,34 @@ export default function Settings() {
 
     fetchSshSettings();
   }, []);
+
+  const loadWorkerServers = useCallback(async (refresh = false) => {
+    try {
+      setWorkerLoading(true);
+      const res = await axios.get(`worker-servers/?refresh=${refresh ? 'true' : 'false'}`);
+      setWorkerServers(res.data || []);
+      setWorkerStatus({ type: 'idle' });
+    } catch (error: unknown) {
+      const { code, message } = getApiErrorCodeAndMessage(error);
+      if (code) {
+        const key = `feedback.settings.workerErrors.${code}`;
+        const translated = t(key);
+        if (translated !== key) {
+          setWorkerStatus({ type: 'error', message: translated });
+        } else {
+          setWorkerStatus({ type: 'error', message: withApiMessage(t, 'feedback.settings.workerLoadFailed', message) });
+        }
+      } else {
+        setWorkerStatus({ type: 'error', message: withApiMessage(t, 'feedback.settings.workerLoadFailed', message) });
+      }
+    } finally {
+      setWorkerLoading(false);
+    }
+  }, [t]);
+
+  useEffect(() => {
+    void loadWorkerServers(false);
+  }, [loadWorkerServers]);
 
   const loadResourceData = useCallback(async (targetMode: 'dangling' | 'unused' = imageMode) => {
     try {
@@ -512,6 +571,93 @@ export default function Settings() {
     }
   };
 
+  const localizeWorkerApiError = useCallback((error: unknown, fallbackKey: string) => {
+    const { code, message } = getApiErrorCodeAndMessage(error);
+    if (code) {
+      const key = `feedback.settings.workerErrors.${code}`;
+      const translated = t(key);
+      if (translated !== key) return translated;
+    }
+    return withApiMessage(t, fallbackKey, message);
+  }, [t]);
+
+  const localizeWorkerHealthStatus = (status: string) => {
+    const key = `settings.workerHealthStatus.${status}`;
+    const translated = t(key);
+    return translated === key ? status : translated;
+  };
+
+  const handleCreateWorkerServer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!workerForm.name.trim()) {
+      setWorkerStatus({ type: 'error', message: t('feedback.settings.workerNameRequired') });
+      return;
+    }
+    if (!workerForm.base_url.trim()) {
+      setWorkerStatus({ type: 'error', message: t('feedback.settings.workerBaseUrlRequired') });
+      return;
+    }
+    if (!workerForm.api_token.trim()) {
+      setWorkerStatus({ type: 'error', message: t('feedback.settings.workerApiTokenRequired') });
+      return;
+    }
+
+    try {
+      setWorkerStatus({ type: 'loading', message: t('feedback.settings.workerSaving') });
+      await axios.post('worker-servers/', workerForm);
+      setWorkerForm({ name: '', base_url: '', api_token: '', is_active: true });
+      await loadWorkerServers(false);
+      setWorkerStatus({ type: 'success', message: t('feedback.settings.workerSaved') });
+      setTimeout(() => setWorkerStatus({ type: 'idle' }), 3000);
+    } catch (error: unknown) {
+      setWorkerStatus({ type: 'error', message: localizeWorkerApiError(error, 'feedback.settings.workerSaveFailed') });
+    }
+  };
+
+  const handleToggleWorkerActive = async (worker: WorkerServer, checked: boolean) => {
+    try {
+      setWorkerStatus({ type: 'loading', message: t('feedback.settings.workerSaving') });
+      await axios.put(`worker-servers/${worker.id}`, { is_active: checked });
+      await loadWorkerServers(false);
+      setWorkerStatus({ type: 'success', message: t('feedback.settings.workerUpdated') });
+      setTimeout(() => setWorkerStatus({ type: 'idle' }), 3000);
+    } catch (error: unknown) {
+      setWorkerStatus({ type: 'error', message: localizeWorkerApiError(error, 'feedback.settings.workerUpdateFailed') });
+    }
+  };
+
+  const handleCheckWorkerHealth = async (worker: WorkerServer) => {
+    try {
+      setWorkerStatus({ type: 'loading', message: t('feedback.settings.workerCheckingHealth') });
+      await axios.post(`worker-servers/${worker.id}/health-check`);
+      await loadWorkerServers(false);
+      setWorkerStatus({ type: 'success', message: t('feedback.settings.workerHealthChecked') });
+      setTimeout(() => setWorkerStatus({ type: 'idle' }), 2500);
+    } catch (error: unknown) {
+      setWorkerStatus({ type: 'error', message: localizeWorkerApiError(error, 'feedback.settings.workerHealthCheckFailed') });
+    }
+  };
+
+  const handleDeleteWorkerServer = async (worker: WorkerServer) => {
+    try {
+      setWorkerStatus({ type: 'loading', message: t('feedback.settings.workerDeleting') });
+      await axios.delete(`worker-servers/${worker.id}`);
+      await loadWorkerServers(false);
+      setWorkerStatus({ type: 'success', message: t('feedback.settings.workerDeleted') });
+      setTimeout(() => setWorkerStatus({ type: 'idle' }), 3000);
+    } catch (error: unknown) {
+      setWorkerStatus({ type: 'error', message: localizeWorkerApiError(error, 'feedback.settings.workerDeleteFailed') });
+    }
+  };
+
+  const getWorkerHealthBadgeClass = (status: string) => {
+    if (status === 'healthy') return 'bg-green-500/10 text-green-500';
+    if (status === 'unknown') return 'bg-gray-500/10 text-gray-400';
+    if (status === 'inactive') return 'bg-gray-500/10 text-gray-400';
+    if (status === 'auth_failed') return 'bg-orange-500/10 text-orange-400';
+    return 'bg-red-500/10 text-red-500';
+  };
+
   const sectionClass = 'rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] overflow-hidden';
   const sectionHeaderClass = 'p-6 border-b border-[var(--border)]';
   const fieldBgClass = 'bg-[color-mix(in_oklab,var(--bg)_38%,var(--bg-elevated))]';
@@ -874,6 +1020,122 @@ export default function Settings() {
           </form>
         </section>
       </div>
+
+      <section className={sectionClass}>
+        <div className="p-6 border-b border-[var(--border)] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h3 className="text-xl font-semibold text-[var(--text)]">{t('settings.workerServersTitle')}</h3>
+            <p className="text-sm text-[var(--text-muted)] mt-1">{t('settings.workerServersDescription')}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => { void loadWorkerServers(true); }}
+            className={`${secondaryButtonClass} self-start sm:self-auto px-3 py-2 flex items-center gap-2`}
+          >
+            <RefreshCw size={14} className={workerLoading ? 'animate-spin' : ''} />
+            {t('actions.refresh')}
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          <form onSubmit={handleCreateWorkerServer} className={`rounded-xl border border-[var(--border)] ${fieldBgClass} p-4 grid grid-cols-1 lg:grid-cols-12 gap-3`}>
+            <input
+              type="text"
+              value={workerForm.name}
+              onChange={(e) => setWorkerForm((prev) => ({ ...prev, name: e.target.value }))}
+              placeholder={t('settings.workerServerNamePlaceholder')}
+              className={`lg:col-span-2 ${inputClass}`}
+            />
+            <input
+              type="text"
+              value={workerForm.base_url}
+              onChange={(e) => setWorkerForm((prev) => ({ ...prev, base_url: e.target.value }))}
+              placeholder={t('settings.workerServerBaseUrlPlaceholder')}
+              className={`lg:col-span-4 ${inputClass}`}
+            />
+            <input
+              type="password"
+              value={workerForm.api_token}
+              onChange={(e) => setWorkerForm((prev) => ({ ...prev, api_token: e.target.value }))}
+              placeholder={t('settings.workerServerApiTokenPlaceholder')}
+              className={`lg:col-span-3 ${inputClass}`}
+            />
+            <label className="lg:col-span-1 inline-flex items-center gap-2 text-sm text-[var(--text)]">
+              <input
+                type="checkbox"
+                checked={workerForm.is_active}
+                onChange={(e) => setWorkerForm((prev) => ({ ...prev, is_active: e.target.checked }))}
+              />
+              {t('settings.active')}
+            </label>
+            <button type="submit" className={`lg:col-span-2 ${primaryButtonClass} py-2.5`} disabled={workerStatus.type === 'loading'}>
+              {t('settings.addWorkerServer')}
+            </button>
+          </form>
+
+          <div className="space-y-2">
+            {workerServers.length === 0 ? (
+              <div className={`rounded-lg border border-[var(--border)] ${fieldBgClass} p-3 text-sm text-[var(--text-muted)]`}>
+                {t('settings.noWorkerServers')}
+              </div>
+            ) : workerServers.map((worker) => (
+              <div key={worker.id} className={`rounded-xl border border-[var(--border)] ${fieldBgClass} p-4 space-y-3`}>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-[var(--text)] truncate">{worker.name}</div>
+                    <div className="text-xs text-[var(--text-muted)] font-mono break-all">{worker.base_url}</div>
+                  </div>
+                  <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${getWorkerHealthBadgeClass(worker.last_health_status)}`}>
+                    {localizeWorkerHealthStatus(worker.last_health_status)}
+                  </span>
+                </div>
+
+                {worker.last_error_message && (
+                  <div className="text-xs text-red-400">
+                    {t(`feedback.settings.workerErrors.worker_health_${worker.last_health_status}`) !== `feedback.settings.workerErrors.worker_health_${worker.last_health_status}`
+                      ? t(`feedback.settings.workerErrors.worker_health_${worker.last_health_status}`)
+                      : worker.last_error_message}
+                  </div>
+                )}
+
+                <div className="flex flex-wrap items-center gap-3">
+                  <label className="inline-flex items-center gap-2 text-xs text-[var(--text)]">
+                    <input
+                      type="checkbox"
+                      checked={worker.is_active}
+                      onChange={(e) => { void handleToggleWorkerActive(worker, e.target.checked); }}
+                    />
+                    {t('settings.active')}
+                  </label>
+                  <button type="button" className={secondaryButtonClass} onClick={() => { void handleCheckWorkerHealth(worker); }}>
+                    {t('settings.checkHealth')}
+                  </button>
+                  <button type="button" className={dangerButtonClass} onClick={() => { void handleDeleteWorkerServer(worker); }}>
+                    {t('actions.delete')}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {workerStatus.message && (
+            <div className={`flex items-center gap-2 text-sm p-3 rounded-lg border ${
+              workerStatus.type === 'success'
+                ? 'text-green-400 bg-green-500/5 border-green-500/20'
+                : workerStatus.type === 'loading'
+                  ? 'text-blue-400 bg-blue-500/5 border-blue-500/20'
+                  : 'text-red-400 bg-red-500/5 border-red-500/20'
+            }`}>
+              {workerStatus.type === 'success'
+                ? <CheckCircle2 size={18} className="shrink-0" />
+                : workerStatus.type === 'loading'
+                  ? <RefreshCw size={18} className="shrink-0 animate-spin" />
+                  : <AlertCircle size={18} className="shrink-0" />}
+              <span className="font-medium">{workerStatus.message}</span>
+            </div>
+          )}
+        </div>
+      </section>
 
       <section className={sectionClass}>
         <div className="p-6 border-b border-[var(--border)] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">

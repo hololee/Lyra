@@ -25,6 +25,9 @@ interface Environment {
   id: string;
   name: string;
   status: string;
+  worker_server_name?: string | null;
+  worker_error_code?: string | null;
+  worker_error_message?: string | null;
   container_user?: string;
   gpu_indices: number[];
   container_id?: string;
@@ -82,7 +85,16 @@ export default function Dashboard() {
   const [errorLogEnv, setErrorLogEnv] = useState<Environment | null>(null);
   const [errorLog, setErrorLog] = useState<string>("");
   const [logLoading, setLogLoading] = useState(false);
+  const [workerErrorInfo, setWorkerErrorInfo] = useState<{ name: string; message: string } | null>(null);
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
+  const getWorkerErrorText = (code?: string | null, fallback?: string | null) => {
+    if (code) {
+      const key = `dashboard.workerError.${code}`;
+      const translated = t(key);
+      if (translated !== key) return translated;
+    }
+    return fallback || t('feedback.common.unknownError');
+  };
   const getStatusLabel = (status: string) => {
     const key = `status.${status}`;
     const translated = t(key);
@@ -206,11 +218,19 @@ export default function Dashboard() {
     }
   };
 
-  const openCodeServer = (env: Environment) => {
-    const protocol = window.location.protocol;
-    const host = window.location.hostname;
-    const url = `${protocol}//${host}:${env.code_port}`;
-    window.open(url, '_blank', 'noopener,noreferrer');
+  const openCodeServer = async (env: Environment) => {
+    try {
+      const res = await axios.post(`environments/${env.id}/code/launch`);
+      const launchUrl = String(res.data.launch_url || '');
+      if (!launchUrl) {
+        showToast(t('feedback.dashboard.codeLaunchUrlMissing'), 'error');
+        return;
+      }
+      const targetUrl = launchUrl.startsWith('http') ? launchUrl : `${window.location.origin}${launchUrl}`;
+      window.open(targetUrl, '_blank', 'noopener,noreferrer');
+    } catch {
+      showToast(t('feedback.dashboard.codeOpenFailed'), 'error');
+    }
   };
 
   useEffect(() => {
@@ -257,6 +277,8 @@ export default function Dashboard() {
     const jupyterEnabled = env.enable_jupyter !== false;
     const codeEnabled = env.enable_code_server !== false;
 
+    const sshSupported = !env.worker_server_name;
+
     const accessItems: Array<{ key: string; node: ReactNode }> = [
       {
         key: 'ssh',
@@ -264,13 +286,15 @@ export default function Dashboard() {
           <div className="relative group">
             <button
               onClick={() => openEnvInTerminal(env)}
-              disabled={!isRunning}
+              disabled={!isRunning || !sshSupported}
               className="p-1 hover:bg-[var(--bg-soft)] rounded text-[var(--text-muted)] hover:text-blue-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <SquareTerminal size={14} />
             </button>
             <div className="pointer-events-none absolute left-1/2 top-[-34px] -translate-x-1/2 whitespace-nowrap rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-xs text-[var(--text)] opacity-0 shadow-lg transition-opacity duration-100 group-hover:opacity-100">
-              {isRunning
+              {!sshSupported
+                ? t('dashboard.openInTerminalWorkerUnsupported')
+                : isRunning
                 ? t('dashboard.openInTerminal', { port: env.ssh_port })
                 : t('dashboard.environmentMustBeRunning', { port: env.ssh_port })}
             </div>
@@ -479,6 +503,34 @@ export default function Dashboard() {
         </OverlayPortal>
       )}
 
+      {workerErrorInfo && (
+        <OverlayPortal>
+          <div className="bg-[var(--bg-elevated)] rounded-xl border border-[var(--border)] shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="p-6 border-b border-[var(--border)] flex justify-between items-center">
+              <h3 className="text-xl font-bold text-[var(--text)] flex items-center gap-2">
+                <HelpCircle size={20} className="text-yellow-400" />
+                {t('dashboard.workerUnavailableTitle')}
+              </h3>
+              <button onClick={() => setWorkerErrorInfo(null)} className="text-[var(--text-muted)] hover:text-[var(--text)] transition-colors">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6 space-y-2">
+              <p className="text-sm text-[var(--text-muted)]">{t('dashboard.workerUnavailableFor', { name: workerErrorInfo.name })}</p>
+              <p className="text-sm text-[var(--text)]">{workerErrorInfo.message}</p>
+            </div>
+            <div className="p-4 border-t border-[var(--border)] bg-[var(--bg-soft)] flex justify-end">
+              <button
+                onClick={() => setWorkerErrorInfo(null)}
+                className="px-4 py-2 rounded-lg text-sm font-medium border border-[var(--border)] bg-[var(--bg-soft)] text-[var(--text)] hover:brightness-95 transition-all"
+              >
+                {t('actions.close')}
+              </button>
+            </div>
+          </div>
+        </OverlayPortal>
+      )}
+
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-3xl font-bold text-[var(--text)]">{t('dashboard.title')}</h2>
@@ -553,6 +605,7 @@ export default function Dashboard() {
                         <tr>
                             <th className="px-6 py-4 font-medium">{t('labels.name')}</th>
                             <th className="px-6 py-4 font-medium">{t('labels.status')}</th>
+                            <th className="px-6 py-4 font-medium">{t('labels.server')}</th>
                             <th className="px-6 py-4 font-medium">{t('labels.access')}</th>
                             <th className="px-6 py-4 font-medium">{t('labels.gpu')}</th>
                             <th className="px-6 py-4 font-medium text-right">{t('labels.actions')}</th>
@@ -597,14 +650,28 @@ export default function Dashboard() {
                                         </span>
                                         {env.status === 'error' && (
                                             <button
-                                                onClick={() => setErrorLogEnv(env)}
+                                                onClick={() => {
+                                                  if (env.worker_server_name && (env.worker_error_message || env.worker_error_code)) {
+                                                    setWorkerErrorInfo({
+                                                      name: env.name,
+                                                      message: getWorkerErrorText(env.worker_error_code, env.worker_error_message),
+                                                    });
+                                                    return;
+                                                  }
+                                                  setErrorLogEnv(env);
+                                                }}
                                                 className="text-red-400 hover:text-red-300 transition-colors"
-                                                title={t('dashboard.viewErrorLogs')}
+                                                title={env.worker_server_name && (env.worker_error_message || env.worker_error_code)
+                                                  ? t('dashboard.viewWorkerError')
+                                                  : t('dashboard.viewErrorLogs')}
                                             >
                                                 <HelpCircle size={16} />
                                             </button>
                                         )}
                                     </div>
+                                </td>
+                                <td className="px-6 py-4 text-[var(--text)]">
+                                  {env.worker_server_name || t('dashboard.hostServer')}
                                 </td>
                                 <td className="px-6 py-4 text-[var(--text)]">
                                     {renderAccessCell(env)}
