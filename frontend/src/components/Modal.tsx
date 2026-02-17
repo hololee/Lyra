@@ -10,6 +10,8 @@ interface ModalProps {
     message: string;
     type?: 'confirm' | 'alert';
     isDestructive?: boolean;
+    confirmText?: string;
+    cancelText?: string;
 }
 
 export default function Modal({
@@ -19,7 +21,9 @@ export default function Modal({
     title,
     message,
     type = 'confirm',
-    isDestructive = false
+    isDestructive = false,
+    confirmText,
+    cancelText,
 }: ModalProps) {
     const { t } = useTranslation();
     if (!isOpen) return null;
@@ -42,7 +46,7 @@ export default function Modal({
                             onClick={onClose}
                             className="rounded-lg border border-[var(--border)] bg-[var(--bg-soft)] px-4 py-2 text-sm font-medium text-[var(--text)] transition-colors hover:brightness-95"
                         >
-                            {t('actions.cancel')}
+                            {cancelText || t('actions.cancel')}
                         </button>
                     )}
                     <button
@@ -56,7 +60,7 @@ export default function Modal({
                             : "bg-[var(--primary)] text-[var(--primary-contrast)] hover:brightness-110"
                         }`}
                     >
-                        {type === 'confirm' ? t('actions.confirm') : t('actions.ok')}
+                        {confirmText || (type === 'confirm' ? t('actions.confirm') : t('actions.ok'))}
                     </button>
                 </div>
             </div>

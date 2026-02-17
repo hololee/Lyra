@@ -27,7 +27,8 @@ export default function UserNameGuard({ children }: UserNameGuardProps) {
       onConfirm={moveToSettings}
       title={t('auth.userNameRequiredTitle')}
       message={t('auth.userNameRequiredMessage')}
-      type="confirm"
+      type="alert"
+      confirmText={t('auth.goToSettings')}
     />
   );
 }
