@@ -11,6 +11,7 @@ import OverlayPortal from '../components/OverlayPortal';
 import { useTheme } from '../context/ThemeContext';
 import { useToast } from '../context/ToastContext';
 import { decrypt } from '../utils/crypto';
+import { buildPrefixedEnvironmentName, getStoredUserName, validateUserName } from '../utils/userIdentity';
 
 interface MountPoint {
   host_path: string;
@@ -402,9 +403,11 @@ export default function Provisioning() {
 
   const submitEnvironment = async () => {
     const validMounts = mounts.filter(m => m.host_path.trim() !== '' && m.container_path.trim() !== '');
+    const userName = getStoredUserName();
+    const prefixedName = buildPrefixedEnvironmentName(userName, name.trim());
 
     const payload = {
-      name,
+      name: prefixedName,
       container_user: 'root',
       root_password: password,
       mount_config: validMounts,
@@ -423,6 +426,10 @@ export default function Provisioning() {
 
   const handleSubmit = async () => {
     const newErrors: {name?: string, password?: string, dockerfile?: string} = {};
+    const userNameValidation = validateUserName(getStoredUserName());
+    if (userNameValidation.code !== 'ok') {
+      newErrors.name = t('provisioning.errorUserNameRequired');
+    }
     if (!name.trim()) {
         newErrors.name = t('provisioning.errorEnvironmentNameRequired');
     } else if (!/^[a-zA-Z0-9-]+$/.test(name)) {
@@ -722,8 +729,13 @@ export default function Provisioning() {
                   errors.name
                     ? "border-red-500/50 focus:border-red-500 focus:ring-red-500/20"
                     : "border-[var(--border)] focus:border-blue-500 focus:ring-blue-500"
-                )}
+                  )}
               />
+              <p className="text-xs text-[var(--text-muted)]">
+                {t('provisioning.environmentNamePreview', {
+                  value: buildPrefixedEnvironmentName(getStoredUserName(), (name || '...').trim()),
+                })}
+              </p>
               {errors.name && (
                 <p className="text-xs text-red-400 mt-1">{errors.name}</p>
               )}

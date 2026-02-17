@@ -563,10 +563,17 @@ export default function Dashboard() {
                           .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }))
                           .map((env) => (
                             <tr key={env.id} className="hover:bg-[var(--bg-soft)] transition-colors">
-                                <td className="px-6 py-4">
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-[var(--text)] font-medium">{env.name}</span>
-                                    <span className="text-sm text-[var(--text-muted)]">({env.container_id || env.id.slice(0, 12)})</span>
+                                <td className="px-6 py-4 w-[30%] max-w-0">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <div className="relative group min-w-0 flex-1">
+                                      <span className="block truncate whitespace-nowrap text-[var(--text)] font-medium">
+                                        {env.name}
+                                      </span>
+                                      <div className="pointer-events-none absolute left-0 top-full z-20 mt-1 hidden max-w-[420px] rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-xs text-[var(--text)] shadow-lg group-hover:block">
+                                        {env.name}
+                                      </div>
+                                    </div>
+                                    <span className="shrink-0 text-sm text-[var(--text-muted)]">({env.container_id || env.id.slice(0, 12)})</span>
                                   </div>
                                 </td>
                                 <td className="px-6 py-4">
