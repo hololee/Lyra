@@ -26,6 +26,7 @@ interface Environment {
   name: string;
   status: string;
   worker_server_name?: string | null;
+  worker_error_code?: string | null;
   worker_error_message?: string | null;
   container_user?: string;
   gpu_indices: number[];
@@ -86,6 +87,14 @@ export default function Dashboard() {
   const [logLoading, setLogLoading] = useState(false);
   const [workerErrorInfo, setWorkerErrorInfo] = useState<{ name: string; message: string } | null>(null);
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
+  const getWorkerErrorText = (code?: string | null, fallback?: string | null) => {
+    if (code) {
+      const key = `dashboard.workerError.${code}`;
+      const translated = t(key);
+      if (translated !== key) return translated;
+    }
+    return fallback || t('feedback.common.unknownError');
+  };
   const getStatusLabel = (status: string) => {
     const key = `status.${status}`;
     const translated = t(key);
@@ -638,17 +647,17 @@ export default function Dashboard() {
                                         {env.status === 'error' && (
                                             <button
                                                 onClick={() => {
-                                                  if (env.worker_server_name && env.worker_error_message) {
+                                                  if (env.worker_server_name && (env.worker_error_message || env.worker_error_code)) {
                                                     setWorkerErrorInfo({
                                                       name: env.name,
-                                                      message: env.worker_error_message,
+                                                      message: getWorkerErrorText(env.worker_error_code, env.worker_error_message),
                                                     });
                                                     return;
                                                   }
                                                   setErrorLogEnv(env);
                                                 }}
                                                 className="text-red-400 hover:text-red-300 transition-colors"
-                                                title={env.worker_server_name && env.worker_error_message
+                                                title={env.worker_server_name && (env.worker_error_message || env.worker_error_code)
                                                   ? t('dashboard.viewWorkerError')
                                                   : t('dashboard.viewErrorLogs')}
                                             >

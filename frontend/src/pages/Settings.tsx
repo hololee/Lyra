@@ -21,6 +21,19 @@ type WorkerServer = {
   last_error_message?: string | null;
 };
 
+const getApiErrorCodeAndMessage = (error: unknown): { code: string; message: string } => {
+  if (!axios.isAxiosError(error)) {
+    return { code: '', message: error instanceof Error ? error.message : String(error) };
+  }
+  const detail = error.response?.data?.detail;
+  if (detail && typeof detail === 'object') {
+    const code = String((detail as { code?: unknown }).code || '').trim();
+    const message = String((detail as { message?: unknown }).message || '').trim();
+    return { code, message };
+  }
+  return { code: '', message: String(error.message || '') };
+};
+
 export default function Settings() {
   const {
     appName,
@@ -133,8 +146,18 @@ export default function Settings() {
       setWorkerServers(res.data || []);
       setWorkerStatus({ type: 'idle' });
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      setWorkerStatus({ type: 'error', message: withApiMessage(t, 'feedback.settings.workerLoadFailed', message) });
+      const { code, message } = getApiErrorCodeAndMessage(error);
+      if (code) {
+        const key = `feedback.settings.workerErrors.${code}`;
+        const translated = t(key);
+        if (translated !== key) {
+          setWorkerStatus({ type: 'error', message: translated });
+        } else {
+          setWorkerStatus({ type: 'error', message: withApiMessage(t, 'feedback.settings.workerLoadFailed', message) });
+        }
+      } else {
+        setWorkerStatus({ type: 'error', message: withApiMessage(t, 'feedback.settings.workerLoadFailed', message) });
+      }
     } finally {
       setWorkerLoading(false);
     }
@@ -548,6 +571,22 @@ export default function Settings() {
     }
   };
 
+  const localizeWorkerApiError = useCallback((error: unknown, fallbackKey: string) => {
+    const { code, message } = getApiErrorCodeAndMessage(error);
+    if (code) {
+      const key = `feedback.settings.workerErrors.${code}`;
+      const translated = t(key);
+      if (translated !== key) return translated;
+    }
+    return withApiMessage(t, fallbackKey, message);
+  }, [t]);
+
+  const localizeWorkerHealthStatus = (status: string) => {
+    const key = `settings.workerHealthStatus.${status}`;
+    const translated = t(key);
+    return translated === key ? status : translated;
+  };
+
   const handleCreateWorkerServer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!workerForm.name.trim()) {
@@ -571,8 +610,7 @@ export default function Settings() {
       setWorkerStatus({ type: 'success', message: t('feedback.settings.workerSaved') });
       setTimeout(() => setWorkerStatus({ type: 'idle' }), 3000);
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      setWorkerStatus({ type: 'error', message: withApiMessage(t, 'feedback.settings.workerSaveFailed', message) });
+      setWorkerStatus({ type: 'error', message: localizeWorkerApiError(error, 'feedback.settings.workerSaveFailed') });
     }
   };
 
@@ -584,8 +622,7 @@ export default function Settings() {
       setWorkerStatus({ type: 'success', message: t('feedback.settings.workerUpdated') });
       setTimeout(() => setWorkerStatus({ type: 'idle' }), 3000);
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      setWorkerStatus({ type: 'error', message: withApiMessage(t, 'feedback.settings.workerUpdateFailed', message) });
+      setWorkerStatus({ type: 'error', message: localizeWorkerApiError(error, 'feedback.settings.workerUpdateFailed') });
     }
   };
 
@@ -597,8 +634,7 @@ export default function Settings() {
       setWorkerStatus({ type: 'success', message: t('feedback.settings.workerHealthChecked') });
       setTimeout(() => setWorkerStatus({ type: 'idle' }), 2500);
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      setWorkerStatus({ type: 'error', message: withApiMessage(t, 'feedback.settings.workerHealthCheckFailed', message) });
+      setWorkerStatus({ type: 'error', message: localizeWorkerApiError(error, 'feedback.settings.workerHealthCheckFailed') });
     }
   };
 
@@ -610,8 +646,7 @@ export default function Settings() {
       setWorkerStatus({ type: 'success', message: t('feedback.settings.workerDeleted') });
       setTimeout(() => setWorkerStatus({ type: 'idle' }), 3000);
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      setWorkerStatus({ type: 'error', message: withApiMessage(t, 'feedback.settings.workerDeleteFailed', message) });
+      setWorkerStatus({ type: 'error', message: localizeWorkerApiError(error, 'feedback.settings.workerDeleteFailed') });
     }
   };
 
@@ -1051,12 +1086,16 @@ export default function Settings() {
                     <div className="text-xs text-[var(--text-muted)] font-mono break-all">{worker.base_url}</div>
                   </div>
                   <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${getWorkerHealthBadgeClass(worker.last_health_status)}`}>
-                    {worker.last_health_status}
+                    {localizeWorkerHealthStatus(worker.last_health_status)}
                   </span>
                 </div>
 
                 {worker.last_error_message && (
-                  <div className="text-xs text-red-400">{worker.last_error_message}</div>
+                  <div className="text-xs text-red-400">
+                    {t(`feedback.settings.workerErrors.worker_health_${worker.last_health_status}`) !== `feedback.settings.workerErrors.worker_health_${worker.last_health_status}`
+                      ? t(`feedback.settings.workerErrors.worker_health_${worker.last_health_status}`)
+                      : worker.last_error_message}
+                  </div>
                 )}
 
                 <div className="flex flex-wrap items-center gap-3">
