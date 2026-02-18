@@ -13,6 +13,10 @@ import { getStoredUserName, setStoredUserName } from '../utils/userIdentity';
 type StatusState = { type: 'idle' | 'loading' | 'success' | 'error'; message?: string };
 type TmuxSession = { name: string; attached: number; windows: number };
 type ResourceCleanupTarget = 'images' | 'volumes' | 'buildCache' | 'tmuxSessions' | null;
+type WorkerCleanupTarget = {
+  worker: WorkerServer;
+  kind: 'images' | 'volumes' | 'buildCache';
+} | null;
 type WorkerServer = {
   id: string;
   name: string;
@@ -20,6 +24,13 @@ type WorkerServer = {
   last_health_status: string;
   last_health_checked_at?: string | null;
   last_error_message?: string | null;
+};
+type WorkerResourceSummary = {
+  imagesCount: number;
+  volumesCount: number;
+  buildCacheCount: number;
+  loading: boolean;
+  error?: boolean;
 };
 
 const getApiErrorCodeAndMessage = (error: unknown): { code: string; message: string } => {
@@ -63,6 +74,7 @@ export default function Settings() {
   const [workerServers, setWorkerServers] = useState<WorkerServer[]>([]);
   const [workerLoading, setWorkerLoading] = useState(false);
   const [workerOrphanCounts, setWorkerOrphanCounts] = useState<Record<string, { count: number; loading: boolean; error?: boolean }>>({});
+  const [workerResourceSummaries, setWorkerResourceSummaries] = useState<Record<string, WorkerResourceSummary>>({});
   const [workerForm, setWorkerForm] = useState({
     name: '',
     base_url: '',
@@ -90,6 +102,7 @@ export default function Settings() {
   const [selectedTmuxSessions, setSelectedTmuxSessions] = useState<string[]>([]);
   const [tmuxLoading, setTmuxLoading] = useState(false);
   const [resourceCleanupTarget, setResourceCleanupTarget] = useState<ResourceCleanupTarget>(null);
+  const [workerCleanupTarget, setWorkerCleanupTarget] = useState<WorkerCleanupTarget>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const faviconInputRef = useRef<HTMLInputElement>(null);
 
@@ -210,6 +223,70 @@ export default function Settings() {
   useEffect(() => {
     void loadWorkerOrphanCounts(workerServers);
   }, [workerServers, loadWorkerOrphanCounts]);
+
+  const loadWorkerResourceSummaries = useCallback(async (workers: WorkerServer[]) => {
+    if (workers.length === 0) {
+      setWorkerResourceSummaries({});
+      return;
+    }
+
+    setWorkerResourceSummaries((prev) => {
+      const next: Record<string, WorkerResourceSummary> = {};
+      workers.forEach((worker) => {
+        next[worker.id] = {
+          imagesCount: prev[worker.id]?.imagesCount || 0,
+          volumesCount: prev[worker.id]?.volumesCount || 0,
+          buildCacheCount: prev[worker.id]?.buildCacheCount || 0,
+          loading: true,
+        };
+      });
+      return next;
+    });
+
+    const results = await Promise.allSettled(
+      workers.map(async (worker) => {
+        const [imagesRes, volumesRes, cacheRes] = await Promise.all([
+          axios.get(`worker-servers/${worker.id}/resources/images/unused?mode=unused`),
+          axios.get(`worker-servers/${worker.id}/resources/volumes/unused`),
+          axios.get(`worker-servers/${worker.id}/resources/build-cache`),
+        ]);
+        return {
+          workerId: worker.id,
+          imagesCount: Number(imagesRes.data?.count || 0),
+          volumesCount: Number(volumesRes.data?.count || 0),
+          buildCacheCount: Number(cacheRes.data?.count || 0),
+        };
+      }),
+    );
+
+    setWorkerResourceSummaries((prev) => {
+      const next = { ...prev };
+      results.forEach((result, index) => {
+        const workerId = workers[index].id;
+        if (result.status === 'fulfilled') {
+          next[workerId] = {
+            imagesCount: result.value.imagesCount,
+            volumesCount: result.value.volumesCount,
+            buildCacheCount: result.value.buildCacheCount,
+            loading: false,
+          };
+        } else {
+          next[workerId] = {
+            imagesCount: 0,
+            volumesCount: 0,
+            buildCacheCount: 0,
+            loading: false,
+            error: true,
+          };
+        }
+      });
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    void loadWorkerResourceSummaries(workerServers);
+  }, [workerServers, loadWorkerResourceSummaries]);
 
   const loadResourceData = useCallback(async (targetMode: 'dangling' | 'unused' = imageMode) => {
     try {
@@ -642,6 +719,47 @@ export default function Settings() {
     }
   };
 
+  const getWorkerCleanupConfirmContent = (): { title: string; message: string } => {
+    if (!workerCleanupTarget) {
+      return {
+        title: t('settings.cleanupWorkerImages'),
+        message: '',
+      };
+    }
+    const workerName = workerCleanupTarget.worker.name;
+    if (workerCleanupTarget.kind === 'images') {
+      return {
+        title: t('settings.cleanupConfirmWorkerImagesTitle'),
+        message: t('settings.cleanupConfirmWorkerImagesMessage', { workerName }),
+      };
+    }
+    if (workerCleanupTarget.kind === 'volumes') {
+      return {
+        title: t('settings.cleanupConfirmWorkerVolumesTitle'),
+        message: t('settings.cleanupConfirmWorkerVolumesMessage', { workerName }),
+      };
+    }
+    return {
+      title: t('settings.cleanupConfirmWorkerBuildCacheTitle'),
+      message: t('settings.cleanupConfirmWorkerBuildCacheMessage', { workerName }),
+    };
+  };
+
+  const handleConfirmWorkerCleanup = () => {
+    if (!workerCleanupTarget) return;
+    const { worker, kind } = workerCleanupTarget;
+    setWorkerCleanupTarget(null);
+    if (kind === 'images') {
+      void handleCleanupWorkerImages(worker);
+      return;
+    }
+    if (kind === 'volumes') {
+      void handleCleanupWorkerVolumes(worker);
+      return;
+    }
+    void handleCleanupWorkerBuildCache(worker);
+  };
+
   const isLoading = appLoading || isSettingsLoading;
   const refreshResourceManagement = async () => {
     await Promise.allSettled([
@@ -744,6 +862,58 @@ export default function Settings() {
     }
   };
 
+  const handleCleanupWorkerImages = async (worker: WorkerServer) => {
+    try {
+      setWorkerStatus({ type: 'loading', message: t('feedback.settings.workerCleanupImagesRunning') });
+      const res = await axios.post(`worker-servers/${worker.id}/resources/images/prune`, { mode: 'unused' });
+      setWorkerStatus({
+        type: 'success',
+        message: t('feedback.settings.workerCleanupImagesResult', {
+          removed: Number(res.data?.removed_count || 0),
+          skipped: Number(res.data?.skipped_count || 0),
+        }),
+      });
+      await loadWorkerResourceSummaries(workerServers);
+      setTimeout(() => setWorkerStatus({ type: 'idle' }), 3000);
+    } catch (error: unknown) {
+      setWorkerStatus({ type: 'error', message: localizeWorkerApiError(error, 'feedback.settings.workerCleanupImagesFailed') });
+    }
+  };
+
+  const handleCleanupWorkerVolumes = async (worker: WorkerServer) => {
+    try {
+      setWorkerStatus({ type: 'loading', message: t('feedback.settings.workerCleanupVolumesRunning') });
+      const res = await axios.post(`worker-servers/${worker.id}/resources/volumes/prune`, {});
+      setWorkerStatus({
+        type: 'success',
+        message: t('feedback.settings.workerCleanupVolumesResult', {
+          removed: Number(res.data?.removed_count || 0),
+          skipped: Number(res.data?.skipped_count || 0),
+        }),
+      });
+      await loadWorkerResourceSummaries(workerServers);
+      setTimeout(() => setWorkerStatus({ type: 'idle' }), 3000);
+    } catch (error: unknown) {
+      setWorkerStatus({ type: 'error', message: localizeWorkerApiError(error, 'feedback.settings.workerCleanupVolumesFailed') });
+    }
+  };
+
+  const handleCleanupWorkerBuildCache = async (worker: WorkerServer) => {
+    try {
+      setWorkerStatus({ type: 'loading', message: t('feedback.settings.workerCleanupBuildCacheRunning') });
+      const res = await axios.post(`worker-servers/${worker.id}/resources/build-cache/prune`, { all: true });
+      const reclaimed = Number(res.data?.space_reclaimed || 0);
+      setWorkerStatus({
+        type: 'success',
+        message: t('feedback.settings.workerCleanupBuildCacheResult', { bytes: formatBytes(reclaimed) }),
+      });
+      await loadWorkerResourceSummaries(workerServers);
+      setTimeout(() => setWorkerStatus({ type: 'idle' }), 3000);
+    } catch (error: unknown) {
+      setWorkerStatus({ type: 'error', message: localizeWorkerApiError(error, 'feedback.settings.workerCleanupBuildCacheFailed') });
+    }
+  };
+
   const getWorkerHealthBadgeClass = (status: string) => {
     if (status === 'healthy') return 'bg-green-500/10 text-green-500';
     if (status === 'unknown') return 'bg-gray-500/10 text-gray-400';
@@ -775,6 +945,17 @@ export default function Settings() {
         onConfirm={handleConfirmResourceCleanup}
         title={getResourceCleanupConfirmContent().title}
         message={getResourceCleanupConfirmContent().message}
+        type="confirm"
+        isDestructive
+        confirmText={t('actions.confirm')}
+        cancelText={t('actions.cancel')}
+      />
+      <Modal
+        isOpen={workerCleanupTarget !== null}
+        onClose={() => setWorkerCleanupTarget(null)}
+        onConfirm={handleConfirmWorkerCleanup}
+        title={getWorkerCleanupConfirmContent().title}
+        message={getWorkerCleanupConfirmContent().message}
         type="confirm"
         isDestructive
         confirmText={t('actions.confirm')}
@@ -1202,6 +1383,17 @@ export default function Settings() {
                       ? t('settings.orphanCountUnavailable')
                       : t('settings.workerOrphanCount', { count: workerOrphanCounts[worker.id]?.count || 0 })}
                 </div>
+                <div className="text-xs text-[var(--text-muted)]">
+                  {workerResourceSummaries[worker.id]?.loading
+                    ? t('settings.loadingWorkerResources')
+                    : workerResourceSummaries[worker.id]?.error
+                      ? t('settings.workerResourceUnavailable')
+                      : t('settings.workerResourceSummary', {
+                          images: workerResourceSummaries[worker.id]?.imagesCount || 0,
+                          volumes: workerResourceSummaries[worker.id]?.volumesCount || 0,
+                          cache: workerResourceSummaries[worker.id]?.buildCacheCount || 0,
+                        })}
+                </div>
 
                 <div className="flex flex-wrap items-center gap-3">
                   <button type="button" className={secondaryButtonClass} onClick={() => { void handleCheckWorkerHealth(worker); }}>
@@ -1219,6 +1411,45 @@ export default function Settings() {
                     onClick={() => { void handleCleanupWorkerOrphans(worker); }}
                   >
                     {t('settings.cleanupWorkerOrphans')}
+                  </button>
+                  <button
+                    type="button"
+                    className={dangerButtonClass}
+                    disabled={
+                      workerStatus.type === 'loading' ||
+                      workerResourceSummaries[worker.id]?.loading ||
+                      workerResourceSummaries[worker.id]?.error ||
+                      (workerResourceSummaries[worker.id]?.imagesCount || 0) === 0
+                    }
+                    onClick={() => setWorkerCleanupTarget({ worker, kind: 'images' })}
+                  >
+                    {t('settings.cleanupWorkerImages')}
+                  </button>
+                  <button
+                    type="button"
+                    className={dangerButtonClass}
+                    disabled={
+                      workerStatus.type === 'loading' ||
+                      workerResourceSummaries[worker.id]?.loading ||
+                      workerResourceSummaries[worker.id]?.error ||
+                      (workerResourceSummaries[worker.id]?.volumesCount || 0) === 0
+                    }
+                    onClick={() => setWorkerCleanupTarget({ worker, kind: 'volumes' })}
+                  >
+                    {t('settings.cleanupWorkerVolumes')}
+                  </button>
+                  <button
+                    type="button"
+                    className={dangerButtonClass}
+                    disabled={
+                      workerStatus.type === 'loading' ||
+                      workerResourceSummaries[worker.id]?.loading ||
+                      workerResourceSummaries[worker.id]?.error ||
+                      (workerResourceSummaries[worker.id]?.buildCacheCount || 0) === 0
+                    }
+                    onClick={() => setWorkerCleanupTarget({ worker, kind: 'buildCache' })}
+                  >
+                    {t('settings.cleanupWorkerBuildCache')}
                   </button>
                   <button type="button" className={dangerButtonClass} onClick={() => { void handleDeleteWorkerServer(worker); }}>
                     {t('actions.delete')}

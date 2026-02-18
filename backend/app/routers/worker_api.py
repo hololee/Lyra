@@ -63,6 +63,78 @@ async def worker_gpu_resources(db: AsyncSession = Depends(get_db)):
     )
 
 
+@router.get("/resources/docker/images/unused")
+async def worker_list_unused_images(mode: str = "dangling"):
+    async def _action() -> dict:
+        return await resource_router.list_unused_images(mode=mode)
+
+    return await _run_worker_action(
+        _action,
+        fallback_code="list_unused_images_failed",
+        success_message="Unused images loaded",
+    )
+
+
+@router.post("/resources/docker/images/prune")
+async def worker_prune_unused_images(payload: dict):
+    async def _action() -> dict:
+        return await resource_router.prune_unused_images(payload=payload)
+
+    return await _run_worker_action(
+        _action,
+        fallback_code="prune_unused_images_failed",
+        success_message="Unused images cleanup completed",
+    )
+
+
+@router.get("/resources/docker/volumes/unused")
+async def worker_list_unused_volumes():
+    async def _action() -> dict:
+        return await resource_router.list_unused_volumes()
+
+    return await _run_worker_action(
+        _action,
+        fallback_code="list_unused_volumes_failed",
+        success_message="Unused volumes loaded",
+    )
+
+
+@router.post("/resources/docker/volumes/prune")
+async def worker_prune_unused_volumes(payload: dict):
+    async def _action() -> dict:
+        return await resource_router.prune_unused_volumes(payload=payload)
+
+    return await _run_worker_action(
+        _action,
+        fallback_code="prune_unused_volumes_failed",
+        success_message="Unused volumes cleanup completed",
+    )
+
+
+@router.get("/resources/docker/build-cache")
+async def worker_get_build_cache_summary():
+    async def _action() -> dict:
+        return await resource_router.get_build_cache_summary()
+
+    return await _run_worker_action(
+        _action,
+        fallback_code="get_build_cache_failed",
+        success_message="Build cache summary loaded",
+    )
+
+
+@router.post("/resources/docker/build-cache/prune")
+async def worker_prune_build_cache(payload: dict):
+    async def _action() -> dict:
+        return await resource_router.prune_build_cache(payload=payload)
+
+    return await _run_worker_action(
+        _action,
+        fallback_code="prune_build_cache_failed",
+        success_message="Build cache cleanup completed",
+    )
+
+
 @router.post("/environments")
 async def worker_create_environment(env: EnvironmentCreate, db: AsyncSession = Depends(get_db)):
     # Worker nodes should always create local containers.

@@ -243,6 +243,91 @@ async def get_worker_gpu_resources(worker_id: str, db: AsyncSession = Depends(ge
         raise _map_worker_request_error(error) from error
 
 
+@router.get("/{worker_id}/resources/images/unused")
+async def get_worker_unused_images(
+    worker_id: str,
+    mode: str = Query(default="dangling", pattern="^(dangling|unused)$"),
+    db: AsyncSession = Depends(get_db),
+):
+    worker = await _assert_worker_ready(db, worker_id)
+    try:
+        return await call_worker_api(
+            worker,
+            method="GET",
+            path=f"/api/worker/resources/docker/images/unused?mode={mode}",
+        )
+    except WorkerRequestError as error:
+        raise _map_worker_request_error(error) from error
+
+
+@router.post("/{worker_id}/resources/images/prune")
+async def prune_worker_unused_images(worker_id: str, payload: dict, db: AsyncSession = Depends(get_db)):
+    worker = await _assert_worker_ready(db, worker_id)
+    try:
+        return await call_worker_api(
+            worker,
+            method="POST",
+            path="/api/worker/resources/docker/images/prune",
+            payload=payload,
+        )
+    except WorkerRequestError as error:
+        raise _map_worker_request_error(error) from error
+
+
+@router.get("/{worker_id}/resources/volumes/unused")
+async def get_worker_unused_volumes(worker_id: str, db: AsyncSession = Depends(get_db)):
+    worker = await _assert_worker_ready(db, worker_id)
+    try:
+        return await call_worker_api(
+            worker,
+            method="GET",
+            path="/api/worker/resources/docker/volumes/unused",
+        )
+    except WorkerRequestError as error:
+        raise _map_worker_request_error(error) from error
+
+
+@router.post("/{worker_id}/resources/volumes/prune")
+async def prune_worker_unused_volumes(worker_id: str, payload: dict, db: AsyncSession = Depends(get_db)):
+    worker = await _assert_worker_ready(db, worker_id)
+    try:
+        return await call_worker_api(
+            worker,
+            method="POST",
+            path="/api/worker/resources/docker/volumes/prune",
+            payload=payload,
+        )
+    except WorkerRequestError as error:
+        raise _map_worker_request_error(error) from error
+
+
+@router.get("/{worker_id}/resources/build-cache")
+async def get_worker_build_cache(worker_id: str, db: AsyncSession = Depends(get_db)):
+    worker = await _assert_worker_ready(db, worker_id)
+    try:
+        return await call_worker_api(
+            worker,
+            method="GET",
+            path="/api/worker/resources/docker/build-cache",
+        )
+    except WorkerRequestError as error:
+        raise _map_worker_request_error(error) from error
+
+
+@router.post("/{worker_id}/resources/build-cache/prune")
+async def prune_worker_build_cache(worker_id: str, payload: dict, db: AsyncSession = Depends(get_db)):
+    worker = await _assert_worker_ready(db, worker_id)
+    try:
+        return await call_worker_api(
+            worker,
+            method="POST",
+            path="/api/worker/resources/docker/build-cache/prune",
+            payload=payload,
+        )
+    except WorkerRequestError as error:
+        raise _map_worker_request_error(error) from error
+
+
 async def _get_worker_orphan_environment_ids(db: AsyncSession, worker: WorkerServer) -> list[str]:
     remote_payload = await call_worker_api(
         worker,
