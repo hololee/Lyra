@@ -1310,7 +1310,9 @@ async def delete_environment(
             except WorkerRequestError as error:
                 raise _map_worker_request_error(error) from error
 
-    # Try to remove container
+    # Try to remove container.
+    # For host environments, container removal failures should fail deletion.
+    # For worker-bound environments on main, ignore local daemon issues.
     try:
         client = docker.from_env()
         container_name = f"lyra-{env.name}-{env.id}"
@@ -1320,7 +1322,12 @@ async def delete_environment(
         except docker.errors.NotFound:
             pass  # Container already gone
     except Exception as e:
-        print(f"Error removing container: {e}")
+        if env.worker_server_id is None:
+            raise HTTPException(
+                status_code=500,
+                detail={"code": "container_delete_failed", "message": f"Failed to remove container: {e}"},
+            ) from e
+        print(f"Error removing local container while deleting worker-bound environment: {e}")
 
     token_key = f"jupyter_token:{env.id}"
     token_result = await db.execute(select(Setting).where(Setting.key == token_key))
