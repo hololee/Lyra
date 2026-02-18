@@ -174,8 +174,13 @@ def _detect_total_gpus() -> int:
         raise HTTPException(status_code=500, detail="Failed to detect GPUs on host") from exc
 
 
-async def _collect_used_gpu_indices(db: AsyncSession) -> set[int]:
-    result = await db.execute(select(Environment).where(Environment.status.in_(GPU_OCCUPIED_STATUSES)))
+async def _collect_used_gpu_indices(db: AsyncSession, worker_server_id: UUID | None = None) -> set[int]:
+    stmt = select(Environment).where(Environment.status.in_(GPU_OCCUPIED_STATUSES))
+    if worker_server_id is None:
+        stmt = stmt.where(Environment.worker_server_id.is_(None))
+    else:
+        stmt = stmt.where(Environment.worker_server_id == worker_server_id)
+    result = await db.execute(stmt)
     active_envs = result.scalars().all()
     used_indices: set[int] = set()
     for active in active_envs:
@@ -578,7 +583,7 @@ async def create_environment(env: EnvironmentCreate, db: AsyncSession = Depends(
         gpu_indices = sorted(requested_indices)
     elif env.gpu_count > 0:
         total_gpus = _detect_total_gpus()
-        used_indices = await _collect_used_gpu_indices(db)
+        used_indices = await _collect_used_gpu_indices(db, env.worker_server_id)
         available_indices = [i for i in range(total_gpus) if i not in used_indices]
         if len(available_indices) < env.gpu_count:
             raise HTTPException(
@@ -617,7 +622,7 @@ async def create_environment(env: EnvironmentCreate, db: AsyncSession = Depends(
                 )
 
                 if requested_indices:
-                    latest_used_indices = await _collect_used_gpu_indices(db)
+                    latest_used_indices = await _collect_used_gpu_indices(db, env.worker_server_id)
                     conflicted = sorted(idx for idx in requested_indices if idx in latest_used_indices)
                     if conflicted:
                         raise HTTPException(
@@ -630,7 +635,7 @@ async def create_environment(env: EnvironmentCreate, db: AsyncSession = Depends(
                     gpu_indices = sorted(requested_indices)
                 elif env.gpu_count > 0:
                     total_gpus = _detect_total_gpus()
-                    latest_used_indices = await _collect_used_gpu_indices(db)
+                    latest_used_indices = await _collect_used_gpu_indices(db, env.worker_server_id)
                     available_indices = [i for i in range(total_gpus) if i not in latest_used_indices]
                     if len(available_indices) < env.gpu_count:
                         raise HTTPException(

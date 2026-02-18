@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy import func
 
 from ..core.security import SecretCipherError, SecretKeyError, encrypt_secret
 from ..core.worker_registry import (
@@ -57,6 +58,19 @@ def _map_worker_request_error(error: WorkerRequestError) -> HTTPException:
     )
 
 
+async def _find_worker_by_name(db: AsyncSession, name: str, exclude_worker_id: str | None = None) -> WorkerServer | None:
+    normalized = (name or "").strip()
+    if not normalized:
+        return None
+
+    stmt = select(WorkerServer).where(func.lower(WorkerServer.name) == normalized.lower())
+    if exclude_worker_id:
+        stmt = stmt.where(WorkerServer.id != exclude_worker_id)
+
+    result = await db.execute(stmt)
+    return result.scalars().first()
+
+
 @router.get("/", response_model=list[WorkerServerResponse])
 async def list_worker_servers(
     refresh: bool = Query(default=False),
@@ -77,6 +91,12 @@ async def create_worker_server(payload: WorkerServerCreate, db: AsyncSession = D
     if not name:
         raise HTTPException(
             status_code=400, detail={"code": "worker_name_required", "message": "Worker name is required"}
+        )
+    existing_name = await _find_worker_by_name(db, name)
+    if existing_name is not None:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "duplicate_worker_name", "message": "Worker server name already exists"},
         )
 
     base_url = _normalize_base_url(payload.base_url)
@@ -142,6 +162,12 @@ async def update_worker_server(worker_id: str, payload: WorkerServerUpdate, db: 
             raise HTTPException(
                 status_code=400,
                 detail={"code": "worker_name_required", "message": "Worker name is required"},
+            )
+        existing_name = await _find_worker_by_name(db, name, exclude_worker_id=str(worker.id))
+        if existing_name is not None:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "duplicate_worker_name", "message": "Worker server name already exists"},
             )
         worker.name = name
 

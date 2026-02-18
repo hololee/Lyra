@@ -33,6 +33,8 @@ interface EnvironmentSummary {
   name?: string;
   status?: string;
   gpu_indices?: number[];
+  worker_server_id?: string | null;
+  worker_server_name?: string | null;
 }
 
 interface WorkerServerOption {
@@ -498,8 +500,18 @@ export default function Provisioning() {
       const envRes = await axios.get('environments/');
       const envs: EnvironmentSummary[] = Array.isArray(envRes.data) ? envRes.data : [];
       const selectedSet = new Set(selectedGpuIndices);
+      const selectedWorkerId = executionTarget === 'host' ? null : executionTarget;
       const stoppedConflicts = envs
-        .filter((env) => env?.status === 'stopped' && Array.isArray(env.gpu_indices) && env.gpu_indices.length > 0)
+        .filter((env) => {
+          if (env?.status !== 'stopped' || !Array.isArray(env.gpu_indices) || env.gpu_indices.length === 0) {
+            return false;
+          }
+          if (executionTarget === 'host') {
+            return !env.worker_server_id;
+          }
+          if (!selectedWorkerId) return false;
+          return (env.worker_server_id || null) === selectedWorkerId;
+        })
         .map((env) => {
           const overlap = (env.gpu_indices || [])
             .map((idx) => Number(idx))
