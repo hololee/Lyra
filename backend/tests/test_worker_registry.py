@@ -89,6 +89,21 @@ def test_check_worker_health_api_mismatch(monkeypatch):
     assert result.status == worker_registry.WORKER_HEALTH_API_MISMATCH
 
 
+def test_check_worker_health_api_mismatch_when_payload_not_object(monkeypatch):
+    async def _fake_request(_base_url, _api_token, _timeout):
+        return 200, []
+
+    monkeypatch.setattr(worker_registry, "_request_worker_health", _fake_request)
+    cfg = worker_registry.WorkerConnectionConfig(
+        id="1",
+        name="worker-1",
+        base_url="http://worker.local",
+        api_token="token",
+    )
+    result = asyncio.run(worker_registry.check_worker_health(cfg))
+    assert result.status == worker_registry.WORKER_HEALTH_API_MISMATCH
+
+
 def test_build_worker_connection_config_decrypts_token(monkeypatch):
     monkeypatch.setattr(worker_registry, "decrypt_secret", lambda _value: "plain-token")
     worker = WorkerServer(
@@ -210,3 +225,32 @@ def test_call_worker_api_rejects_non_object_body_on_success(monkeypatch):
         asyncio.run(worker_registry.call_worker_api(worker, method="GET", path="/api/worker/environments"))
 
     assert exc_info.value.code == "worker_api_mismatch"
+
+
+def test_call_worker_api_propagates_worker_http_error_payload(monkeypatch):
+    worker = WorkerServer(
+        id=uuid.uuid4(),
+        name="worker-1",
+        base_url="http://worker.local",
+        api_token_encrypted="enc",
+    )
+
+    def _fake_build(_worker):
+        return worker_registry.WorkerConnectionConfig(
+            id=str(_worker.id),
+            name=_worker.name,
+            base_url=_worker.base_url,
+            api_token="token",
+        )
+
+    async def _fake_request(**_kwargs):
+        return 404, {"detail": {"code": "environment_not_found", "message": "Environment not found"}}
+
+    monkeypatch.setattr(worker_registry, "build_worker_connection_config", _fake_build)
+    monkeypatch.setattr(worker_registry, "_request_worker_json", _fake_request)
+
+    with pytest.raises(worker_registry.WorkerRequestError) as exc_info:
+        asyncio.run(worker_registry.call_worker_api(worker, method="GET", path=f"/api/worker/environments/{uuid.uuid4()}"))
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.code == "environment_not_found"

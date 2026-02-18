@@ -76,6 +76,10 @@ def _is_port_unique_violation(error: IntegrityError) -> bool:
 
 
 def _is_worker_environment_not_found(error: WorkerRequestError) -> bool:
+    if error.status_code == 404:
+        return True
+    if error.code in {"environment_not_found", "worker_environment_not_found"}:
+        return True
     if error.code != "worker_request_failed":
         return False
     message = (error.message or "").lower()
@@ -1360,7 +1364,7 @@ async def delete_environment(
                 status_code=500,
                 detail={"code": "container_delete_failed", "message": f"Failed to remove container: {e}"},
             ) from e
-        print(f"Error removing local container while deleting worker-bound environment: {e}")
+        logger.warning("Error removing local container while deleting worker-bound environment: %s", e)
 
     token_key = f"jupyter_token:{env.id}"
     token_result = await db.execute(select(Setting).where(Setting.key == token_key))

@@ -1,5 +1,6 @@
 import os
 import secrets
+import logging
 from pathlib import Path
 
 from fastapi import Header, HTTPException, status
@@ -9,6 +10,7 @@ WORKER_ROLE = "worker"
 MAIN_ROLE = "main"
 _WORKER_RUNTIME_TOKEN: str | None = None
 DEFAULT_WORKER_TOKEN_FILE = "/var/lib/lyra/worker/worker_api_token"
+logger = logging.getLogger(__name__)
 
 
 def get_node_role() -> str:
@@ -28,14 +30,14 @@ def ensure_worker_api_token() -> str:
     loaded = _load_worker_token(token_file)
     if loaded:
         _WORKER_RUNTIME_TOKEN = loaded
-        print("[Lyra][Worker] Loaded runtime worker API token from Docker volume.")
-        print(f"[Lyra][Worker] Token: {_WORKER_RUNTIME_TOKEN}")
+        logger.info("[Lyra][Worker] Loaded runtime worker API token from Docker volume.")
+        logger.info("[Lyra][Worker] Token: %s", _WORKER_RUNTIME_TOKEN)
         return _WORKER_RUNTIME_TOKEN
 
     _WORKER_RUNTIME_TOKEN = secrets.token_urlsafe(32)
     _persist_worker_token(token_file, _WORKER_RUNTIME_TOKEN)
-    print("[Lyra][Worker] Generated runtime worker API token and persisted it to Docker volume.")
-    print(f"[Lyra][Worker] Token: {_WORKER_RUNTIME_TOKEN}")
+    logger.info("[Lyra][Worker] Generated runtime worker API token and persisted it to Docker volume.")
+    logger.info("[Lyra][Worker] Token: %s", _WORKER_RUNTIME_TOKEN)
     return _WORKER_RUNTIME_TOKEN
 
 
@@ -53,7 +55,7 @@ def _load_worker_token(path: Path) -> str:
         token = path.read_text(encoding="utf-8").strip()
         return token
     except Exception as error:  # noqa: BLE001
-        print(f"[Lyra][Worker] Failed to read worker token file '{path}': {error}")
+        logger.warning("[Lyra][Worker] Failed to read worker token file '%s': %s", path, error)
         return ""
 
 
@@ -66,7 +68,7 @@ def _persist_worker_token(path: Path, token: str) -> None:
         except Exception:
             pass
     except Exception as error:  # noqa: BLE001
-        print(f"[Lyra][Worker] Failed to persist worker token file '{path}': {error}")
+        logger.warning("[Lyra][Worker] Failed to persist worker token file '%s': %s", path, error)
 
 
 def require_worker_role() -> None:
