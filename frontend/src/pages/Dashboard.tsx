@@ -603,8 +603,8 @@ export default function Dashboard() {
       {/* Volume Details Modal */}
       {selectedVolEnv && (
         <OverlayPortal>
-            <div className="bg-[var(--bg-elevated)] rounded-xl border border-[var(--border)] shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
-                <div className="p-6 border-b border-[var(--border)] flex justify-between items-center">
+            <div className="bg-[var(--bg-elevated)] rounded-xl border border-[var(--border)] shadow-2xl w-full max-w-lg max-h-[85vh] overflow-hidden animate-in fade-in zoom-in duration-200 flex flex-col">
+                <div className="p-6 border-b border-[var(--border)] flex justify-between items-center shrink-0">
                     <h3 className="text-xl font-bold text-[var(--text)] flex items-center gap-2">
                         <HardDrive size={20} className="text-blue-400" />
                         {t('dashboard.volumeMounts')}
@@ -613,7 +613,7 @@ export default function Dashboard() {
                         <X size={20} />
                     </button>
                 </div>
-                <div className="p-6">
+                <div className="p-6 overflow-y-auto">
                     <p className="text-[var(--text-muted)] text-sm mb-4">{t('dashboard.mountedVolumesFor', { name: selectedVolEnv.name })}</p>
                     <div className="space-y-3">
                         {selectedVolEnv.mount_config.map((mount, idx) => (
@@ -633,7 +633,7 @@ export default function Dashboard() {
                         ))}
                     </div>
                 </div>
-                <div className="p-4 border-t border-[var(--border)] bg-[var(--bg-soft)] flex justify-end">
+                <div className="p-4 border-t border-[var(--border)] bg-[var(--bg-soft)] flex justify-end shrink-0">
                     <button
                         onClick={() => setSelectedVolEnv(null)}
                         className="px-4 py-2 rounded-lg text-sm font-medium border border-[var(--border)] bg-[var(--bg-soft)] text-[var(--text)] hover:brightness-95 transition-all"
@@ -648,8 +648,8 @@ export default function Dashboard() {
       {/* Port Details Modal */}
       {selectedPortEnv && (
         <OverlayPortal>
-            <div className="bg-[var(--bg-elevated)] rounded-xl border border-[var(--border)] shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
-                <div className="p-6 border-b border-[var(--border)] flex justify-between items-center">
+            <div className="bg-[var(--bg-elevated)] rounded-xl border border-[var(--border)] shadow-2xl w-full max-w-lg max-h-[85vh] overflow-hidden animate-in fade-in zoom-in duration-200 flex flex-col">
+                <div className="p-6 border-b border-[var(--border)] flex justify-between items-center shrink-0">
                     <h3 className="text-xl font-bold text-[var(--text)] flex items-center gap-2">
                         <Network size={20} className="text-cyan-400" />
                         {t('dashboard.customPortMappings')}
@@ -658,7 +658,7 @@ export default function Dashboard() {
                         <X size={20} />
                     </button>
                 </div>
-                <div className="p-6">
+                <div className="p-6 overflow-y-auto">
                     <p className="text-[var(--text-muted)] text-sm mb-4">{t('dashboard.customPortsFor', { name: selectedPortEnv.name })}</p>
                     <div className="space-y-3">
                         {selectedPortEnv.custom_ports.map((mapping, idx) => (
@@ -674,7 +674,7 @@ export default function Dashboard() {
                         ))}
                     </div>
                 </div>
-                <div className="p-4 border-t border-[var(--border)] bg-[var(--bg-soft)] flex justify-end">
+                <div className="p-4 border-t border-[var(--border)] bg-[var(--bg-soft)] flex justify-end shrink-0">
                     <button
                         onClick={() => setSelectedPortEnv(null)}
                         className="px-4 py-2 rounded-lg text-sm font-medium border border-[var(--border)] bg-[var(--bg-soft)] text-[var(--text)] hover:brightness-95 transition-all"
