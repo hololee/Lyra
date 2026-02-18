@@ -160,9 +160,18 @@ export default function Provisioning() {
   const [checkingBrowseIndex, setCheckingBrowseIndex] = useState<number | null>(null);
   const [customPorts, setCustomPorts] = useState<CustomPortMapping[]>([]);
   const [isAllocatingPort, setIsAllocatingPort] = useState(false);
+  const [isInitializingTargets, setIsInitializingTargets] = useState(true);
   const [userDockerfile, setUserDockerfile] = useState('FROM python:3.11-slim\n');
   const [enableJupyter, setEnableJupyter] = useState(true);
   const [enableCodeServer, setEnableCodeServer] = useState(true);
+  const isWorkerSelectable = useCallback((worker: WorkerServerOption) => {
+    return String(worker.last_health_status || '').toLowerCase() === 'healthy';
+  }, []);
+  const localizeWorkerHealthStatus = useCallback((status?: string) => {
+    const key = `settings.workerHealthStatus.${String(status || 'unknown')}`;
+    const translated = t(key);
+    return translated === key ? String(status || 'unknown') : translated;
+  }, [t]);
 
   const fetchGpuResources = useCallback(async (target: 'host' | string) => {
     try {
@@ -188,20 +197,18 @@ export default function Provisioning() {
     }
   }, [showToast, t]);
 
-  const fetchWorkerServers = useCallback(async () => {
+  const fetchWorkerServers = useCallback(async (refresh = false) => {
     try {
-      const res = await axios.get('worker-servers/');
+      const res = await axios.get(`worker-servers/?refresh=${refresh ? 'true' : 'false'}`);
       const workers = Array.isArray(res.data) ? (res.data as WorkerServerOption[]) : [];
       setWorkerServers(workers);
-      if (executionTarget !== 'host' && !workers.some((worker) => worker.id === executionTarget)) {
-        setExecutionTarget('host');
-      }
+      return workers;
     } catch (error) {
       console.error('Failed to fetch worker servers', error);
       setWorkerServers([]);
-      if (executionTarget !== 'host') setExecutionTarget('host');
+      return [];
     }
-  }, [executionTarget]);
+  }, []);
 
   // Load template if provided
   useEffect(() => {
@@ -222,12 +229,39 @@ export default function Provisioning() {
   }, [location.state]);
 
   useEffect(() => {
-    void fetchWorkerServers();
-  }, [fetchWorkerServers]);
+    let isMounted = true;
+    const initializeTargets = async () => {
+      setIsInitializingTargets(true);
+      try {
+        const workers = await fetchWorkerServers(true);
+        let nextTarget: 'host' | string = executionTarget;
+        if (
+          nextTarget !== 'host' &&
+          !workers.some((worker) => worker.id === nextTarget && isWorkerSelectable(worker))
+        ) {
+          nextTarget = 'host';
+          if (isMounted) {
+            showToast(t('feedback.provisioning.executionTargetUnavailable'), 'error');
+          }
+        }
+        if (isMounted && nextTarget !== executionTarget) {
+          setExecutionTarget(nextTarget);
+        }
+        await fetchGpuResources(nextTarget);
+      } finally {
+        if (isMounted) setIsInitializingTargets(false);
+      }
+    };
+    void initializeTargets();
+    return () => {
+      isMounted = false;
+    };
+  }, [fetchGpuResources, fetchWorkerServers, isWorkerSelectable, showToast, t]);
 
   useEffect(() => {
+    if (isInitializingTargets) return;
     void fetchGpuResources(executionTarget);
-  }, [executionTarget, fetchGpuResources]);
+  }, [executionTarget, fetchGpuResources, isInitializingTargets]);
 
   const handleAddGpuSelection = () => {
     const selectable = availableGpuIndices.filter((idx) => !selectedGpuIndices.includes(idx));
@@ -689,6 +723,14 @@ export default function Provisioning() {
           handleCloseHostPathPicker();
         }}
       />
+      {isInitializingTargets && (
+        <OverlayPortal>
+          <div className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-xl px-6 py-5 shadow-2xl flex items-center gap-3">
+            <Loader2 size={18} className="animate-spin text-blue-500" />
+            <span className="text-sm font-medium text-[var(--text)]">{t('provisioning.initializingExecutionTargets')}</span>
+          </div>
+        </OverlayPortal>
+      )}
 
       {/* Save Template Modal */}
       {isSaveModalOpen && (
@@ -786,8 +828,10 @@ export default function Provisioning() {
               >
                 <option value="host">{t('provisioning.executionTargetHost')}</option>
                 {workerServers.map((worker) => (
-                  <option key={worker.id} value={worker.id}>
-                    {worker.name}
+                  <option key={worker.id} value={worker.id} disabled={!isWorkerSelectable(worker)}>
+                    {isWorkerSelectable(worker)
+                      ? worker.name
+                      : `${worker.name} (${localizeWorkerHealthStatus(worker.last_health_status)})`}
                   </option>
                 ))}
               </select>
