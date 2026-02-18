@@ -78,7 +78,7 @@ async def list_worker_servers(
     workers = result.scalars().all()
     if refresh:
         for worker in workers:
-            await refresh_worker_health(db, worker)
+            await refresh_worker_health(db, worker, use_cache=False)
         await db.commit()
     return workers
 
@@ -127,7 +127,7 @@ async def create_worker_server(payload: WorkerServerCreate, db: AsyncSession = D
 
     try:
         await db.flush()
-        await refresh_worker_health(db, worker)
+        await refresh_worker_health(db, worker, use_cache=False)
         await db.commit()
         await db.refresh(worker)
         return worker
@@ -197,7 +197,7 @@ async def update_worker_server(worker_id: str, payload: WorkerServerUpdate, db: 
 
     try:
         await db.flush()
-        await refresh_worker_health(db, worker)
+        await refresh_worker_health(db, worker, use_cache=False)
         await db.commit()
         await db.refresh(worker)
         return worker
@@ -223,7 +223,7 @@ async def check_worker_server_health(worker_id: str, db: AsyncSession = Depends(
     if not worker:
         raise HTTPException(status_code=404, detail={"code": "worker_not_found", "message": "Worker server not found"})
 
-    await refresh_worker_health(db, worker)
+    await refresh_worker_health(db, worker, use_cache=False)
     await db.commit()
     await db.refresh(worker)
     return worker

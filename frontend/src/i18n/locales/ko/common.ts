@@ -100,7 +100,6 @@ const koCommon = {
     viewWorkerError: '워커 연결 오류 보기',
     workerError: {
       worker_not_found: '워커 서버를 찾을 수 없습니다.',
-      worker_inactive: '워커 서버가 비활성 상태입니다.',
       worker_unreachable: '워커 서버에 연결할 수 없습니다.',
       worker_auth_failed: '워커 인증에 실패했습니다.',
       worker_request_failed: '워커 요청에 실패했습니다.',
@@ -111,7 +110,6 @@ const koCommon = {
       worker_health_misconfigured: '워커 서버 설정에 문제가 있습니다.',
       worker_health_api_mismatch: '워커 API 응답 형식이 호환되지 않습니다.',
       worker_health_request_failed: '워커 요청에 실패했습니다.',
-      worker_health_inactive: '워커 서버가 비활성 상태입니다.',
       worker_health_unknown: '워커 상태를 확인할 수 없습니다.',
     },
   },
@@ -424,7 +422,6 @@ const koCommon = {
       workerDeleteFailed: '워커 서버 삭제에 실패했습니다: {{message}}',
       workerErrors: {
         worker_not_found: '워커 서버를 찾을 수 없습니다.',
-        worker_inactive: '워커 서버가 비활성 상태입니다.',
         worker_unreachable: '워커 서버에 연결할 수 없습니다.',
         worker_auth_failed: '워커 인증에 실패했습니다.',
         worker_request_failed: '워커 요청에 실패했습니다.',
@@ -441,7 +438,6 @@ const koCommon = {
         worker_health_misconfigured: '워커 서버 설정에 문제가 있습니다.',
         worker_health_api_mismatch: '워커 API 응답 형식이 호환되지 않습니다.',
         worker_health_request_failed: '워커 요청에 실패했습니다.',
-        worker_health_inactive: '워커 서버가 비활성 상태입니다.',
         worker_health_unknown: '워커 상태를 확인할 수 없습니다.',
       },
       cleanupImagesRunning: '미사용 이미지를 정리하는 중...',

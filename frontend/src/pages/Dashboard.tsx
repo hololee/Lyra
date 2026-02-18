@@ -484,7 +484,8 @@ export default function Dashboard() {
   }, [hasAnnouncement, isNoticeOpen]);
 
   const renderAccessCell = (env: Environment): ReactNode => {
-    if (env.status === 'stopped' || env.status === 'error') {
+    const hasWorkerError = Boolean(env.worker_server_name && (env.worker_error_code || env.worker_error_message));
+    if (env.status === 'stopped' || env.status === 'error' || hasWorkerError) {
       return <span>-</span>;
     }
 
@@ -919,7 +920,7 @@ export default function Dashboard() {
                                               ? (env.status === 'running' ? t('status.stopping') : t('status.starting'))
                                               : getStatusLabel(env.status)}
                                         </span>
-                                        {env.status === 'error' && (
+                                        {(env.status === 'error' || (env.worker_server_name && (env.worker_error_message || env.worker_error_code))) && (
                                             <button
                                                 onClick={() => {
                                                   if (env.worker_server_name && (env.worker_error_message || env.worker_error_code)) {
@@ -931,7 +932,7 @@ export default function Dashboard() {
                                                   }
                                                   setErrorLogEnv(env);
                                                 }}
-                                                className="text-red-400 hover:text-red-300 transition-colors"
+                                                className={`${env.worker_server_name && (env.worker_error_message || env.worker_error_code) ? 'text-yellow-400 hover:text-yellow-300' : 'text-red-400 hover:text-red-300'} transition-colors`}
                                                 title={env.worker_server_name && (env.worker_error_message || env.worker_error_code)
                                                   ? t('dashboard.viewWorkerError')
                                                   : t('dashboard.viewErrorLogs')}

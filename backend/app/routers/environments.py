@@ -811,7 +811,6 @@ async def read_environments(skip: int = 0, limit: int = 100, db: AsyncSession = 
 
     worker_health_cache: dict[UUID, bool] = {}
     worker_health_message_cache: dict[UUID, str] = {}
-    status_changed = False
 
     client = None
     docker_available = True
@@ -829,16 +828,15 @@ async def read_environments(skip: int = 0, limit: int = 100, db: AsyncSession = 
     for env in envs:
         container_name = f"lyra-{env.name}-{env.id}"
         container_id: str | None = None
+        response_status = env.status
 
         env_worker_server_id = getattr(env, "worker_server_id", None)
         if env_worker_server_id:
             worker = worker_map.get(env_worker_server_id)
             if not worker:
-                if env.status != "error":
-                    env.status = "error"
-                    status_changed = True
                 env_dict = {
                     **env.__dict__,
+                    "status": response_status,
                     "worker_server_name": None,
                     "worker_server_base_url": None,
                     "worker_error_code": "worker_not_found",
@@ -858,11 +856,9 @@ async def read_environments(skip: int = 0, limit: int = 100, db: AsyncSession = 
                 worker_health_message_cache[worker.id] = health.message
 
             if not healthy:
-                if env.status != "error":
-                    env.status = "error"
-                    status_changed = True
                 env_dict = {
                     **env.__dict__,
+                    "status": response_status,
                     "worker_server_name": worker.name,
                     "worker_server_base_url": worker.base_url,
                     "worker_error_code": f"worker_health_{worker.last_health_status}",
@@ -882,16 +878,11 @@ async def read_environments(skip: int = 0, limit: int = 100, db: AsyncSession = 
                     path=f"/api/worker/environments/{env.id}",
                 )
                 remote_status = str(remote_env.get("status") or env.status)
-                if env.status != remote_status:
-                    env.status = remote_status
-                    status_changed = True
+                response_status = remote_status
                 container_id = remote_env.get("container_id")
                 if isinstance(container_id, str) and len(container_id) > 12:
                     container_id = container_id[:12]
             except WorkerRequestError as error:
-                if env.status != "error":
-                    env.status = "error"
-                    status_changed = True
                 worker_error_code = error.code
                 worker_error_message = error.message
                 container_id = None
@@ -901,6 +892,7 @@ async def read_environments(skip: int = 0, limit: int = 100, db: AsyncSession = 
 
             env_dict = {
                 **env.__dict__,
+                "status": response_status,
                 "worker_server_name": worker.name,
                 "worker_server_base_url": worker.base_url,
                 "worker_error_code": worker_error_code,
@@ -925,13 +917,10 @@ async def read_environments(skip: int = 0, limit: int = 100, db: AsyncSession = 
                     oom_killed=state_info.get("OOMKilled", False),
                     error_msg=state_info.get("Error", ""),
                 )
-                if env.status != new_status:
-                    env.status = new_status
-                    status_changed = True
+                response_status = new_status
             except docker.errors.NotFound:
                 if env.status in ["running", "stopping", "starting"]:
-                    env.status = "stopped"
-                    status_changed = True
+                    response_status = "stopped"
             except docker.errors.DockerException as error:
                 logger.warning(
                     "Docker status lookup failed for env %s. Falling back to DB status: %s",
@@ -947,6 +936,7 @@ async def read_environments(skip: int = 0, limit: int = 100, db: AsyncSession = 
 
         env_dict = {
             **env.__dict__,
+            "status": response_status,
             "worker_server_name": None,
             "worker_server_base_url": None,
             "worker_error_code": None,
@@ -956,9 +946,6 @@ async def read_environments(skip: int = 0, limit: int = 100, db: AsyncSession = 
         }
         env_dict.pop("_sa_instance_state", None)
         env_responses.append(env_dict)
-
-    if status_changed:
-        await db.commit()
 
     return env_responses
 
@@ -974,6 +961,7 @@ async def read_environment(environment_id: str, db: AsyncSession = Depends(get_d
     worker_server_base_url = None
     worker_error_code = None
     worker_error_message = None
+    response_status = env.status
 
     if env.worker_server_id:
         worker = await _get_worker_server_by_id(db, env.worker_server_id)
@@ -987,25 +975,18 @@ async def read_environment(environment_id: str, db: AsyncSession = Depends(get_d
                     path=f"/api/worker/environments/{env.id}",
                 )
                 remote_status = str(remote_env.get("status") or env.status)
-                if env.status != remote_status:
-                    env.status = remote_status
-                    await db.commit()
+                response_status = remote_status
             except WorkerRequestError as error:
-                if env.status != "error":
-                    env.status = "error"
-                    await db.commit()
                 worker_error_code = error.code
                 worker_error_message = error.message
         else:
-            if env.status != "error":
-                env.status = "error"
-                await db.commit()
             worker_error_code = "worker_not_found"
             worker_error_message = "Worker server not found"
 
     custom_ports = await _get_custom_ports_for_environment(db, str(env.id))
     env_dict = {
         **env.__dict__,
+        "status": response_status,
         "custom_ports": custom_ports,
         "worker_server_name": worker_server_name,
         "worker_server_base_url": worker_server_base_url,

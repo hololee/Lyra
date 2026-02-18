@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
@@ -38,6 +39,13 @@ class WorkerHealthResult:
     latency_ms: int | None = None
 
 
+@dataclass
+class WorkerHealthCacheEntry:
+    checked_at: datetime
+    result: WorkerHealthResult
+    cached_at_monotonic: float
+
+
 class WorkerRequestError(RuntimeError):
     def __init__(self, code: str, message: str, status_code: int = 503):
         super().__init__(message)
@@ -65,6 +73,22 @@ def _resolve_worker_timeout() -> float:
     if value > 30.0:
         return 30.0
     return value
+
+
+def _resolve_worker_health_cache_ttl() -> float:
+    raw = (os.getenv("LYRA_WORKER_HEALTH_CACHE_SECONDS", "") or "").strip()
+    try:
+        value = float(raw) if raw else 8.0
+    except ValueError:
+        value = 8.0
+    if value < 0:
+        return 0.0
+    if value > 30.0:
+        return 30.0
+    return value
+
+
+_worker_health_cache: dict[str, WorkerHealthCacheEntry] = {}
 
 
 def _build_worker_api_url(base_url: str, path: str) -> str:
@@ -128,16 +152,22 @@ async def check_worker_health(config: WorkerConnectionConfig, timeout: float | N
 
     request_timeout = timeout if timeout is not None else _resolve_worker_timeout()
     started_at = _now_utc()
-    try:
-        http_status, payload = await _request_worker_health(config.base_url, config.api_token, request_timeout)
-    except httpx.TimeoutException:
-        return WorkerHealthResult(status=WORKER_HEALTH_UNREACHABLE, message="Worker request timed out")
-    except httpx.ConnectError:
-        return WorkerHealthResult(status=WORKER_HEALTH_UNREACHABLE, message="Failed to connect to worker")
-    except httpx.HTTPError as error:
-        return WorkerHealthResult(status=WORKER_HEALTH_REQUEST_FAILED, message=f"Worker HTTP error: {error}")
-    except Exception as error:  # noqa: BLE001
-        return WorkerHealthResult(status=WORKER_HEALTH_REQUEST_FAILED, message=f"Worker request failed: {error}")
+    for attempt in range(2):
+        try:
+            http_status, payload = await _request_worker_health(config.base_url, config.api_token, request_timeout)
+            break
+        except httpx.TimeoutException:
+            if attempt == 0:
+                continue
+            return WorkerHealthResult(status=WORKER_HEALTH_UNREACHABLE, message="Worker request timed out")
+        except httpx.ConnectError:
+            if attempt == 0:
+                continue
+            return WorkerHealthResult(status=WORKER_HEALTH_UNREACHABLE, message="Failed to connect to worker")
+        except httpx.HTTPError as error:
+            return WorkerHealthResult(status=WORKER_HEALTH_REQUEST_FAILED, message=f"Worker HTTP error: {error}")
+        except Exception as error:  # noqa: BLE001
+            return WorkerHealthResult(status=WORKER_HEALTH_REQUEST_FAILED, message=f"Worker request failed: {error}")
 
     latency_ms = int((_now_utc() - started_at).total_seconds() * 1000)
 
@@ -173,7 +203,18 @@ async def check_worker_health(config: WorkerConnectionConfig, timeout: float | N
     )
 
 
-async def refresh_worker_health(db: AsyncSession, worker: WorkerServer) -> WorkerHealthResult:
+async def refresh_worker_health(db: AsyncSession, worker: WorkerServer, *, use_cache: bool = True) -> WorkerHealthResult:
+    cache_ttl_seconds = _resolve_worker_health_cache_ttl()
+    cache_key = str(worker.id)
+    now_monotonic = time.monotonic()
+    if use_cache and cache_ttl_seconds > 0:
+        cached = _worker_health_cache.get(cache_key)
+        if cached and (now_monotonic - cached.cached_at_monotonic) <= cache_ttl_seconds:
+            worker.last_health_status = cached.result.status
+            worker.last_health_checked_at = cached.checked_at
+            worker.last_error_message = None if cached.result.status == WORKER_HEALTH_HEALTHY else cached.result.message
+            return cached.result
+
     checked_at = _now_utc()
     try:
         config = build_worker_connection_config(worker)
@@ -187,6 +228,11 @@ async def refresh_worker_health(db: AsyncSession, worker: WorkerServer) -> Worke
     worker.last_health_status = result.status
     worker.last_health_checked_at = checked_at
     worker.last_error_message = None if result.status == WORKER_HEALTH_HEALTHY else result.message
+    _worker_health_cache[cache_key] = WorkerHealthCacheEntry(
+        checked_at=checked_at,
+        result=result,
+        cached_at_monotonic=now_monotonic,
+    )
     await db.flush()
     return result
 

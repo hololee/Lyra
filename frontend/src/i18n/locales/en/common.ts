@@ -101,7 +101,6 @@ const enCommon = {
     viewWorkerError: 'View worker connectivity error',
     workerError: {
       worker_not_found: 'Worker server not found.',
-      worker_inactive: 'Worker server is inactive.',
       worker_unreachable: 'Worker server is unreachable.',
       worker_auth_failed: 'Worker authentication failed.',
       worker_request_failed: 'Worker request failed.',
@@ -112,7 +111,6 @@ const enCommon = {
       worker_health_misconfigured: 'Worker server is misconfigured.',
       worker_health_api_mismatch: 'Worker API response is incompatible.',
       worker_health_request_failed: 'Worker request failed.',
-      worker_health_inactive: 'Worker server is inactive.',
       worker_health_unknown: 'Worker health is unknown.',
     },
   },
@@ -426,7 +424,6 @@ const enCommon = {
       workerDeleteFailed: 'Failed to delete worker server: {{message}}',
       workerErrors: {
         worker_not_found: 'Worker server not found.',
-        worker_inactive: 'Worker server is inactive.',
         worker_unreachable: 'Worker server is unreachable.',
         worker_auth_failed: 'Worker authentication failed.',
         worker_request_failed: 'Worker request failed.',
@@ -443,7 +440,6 @@ const enCommon = {
         worker_health_misconfigured: 'Worker server is misconfigured.',
         worker_health_api_mismatch: 'Worker API response is incompatible.',
         worker_health_request_failed: 'Worker request failed.',
-        worker_health_inactive: 'Worker server is inactive.',
         worker_health_unknown: 'Worker health is unknown.',
       },
       cleanupImagesRunning: 'Cleaning unused images...',
