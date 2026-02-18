@@ -111,10 +111,17 @@ export default function Dashboard() {
       return { code: '', message: error instanceof Error ? error.message : String(error) };
     }
     const detail = error.response?.data?.detail;
+    if (typeof detail === 'string') {
+      return { code: '', message: detail.trim() };
+    }
     if (detail && typeof detail === 'object') {
       const code = String((detail as { code?: unknown }).code || '').trim();
       const message = String((detail as { message?: unknown }).message || '').trim();
       return { code, message };
+    }
+    const topLevelMessage = error.response?.data?.message;
+    if (typeof topLevelMessage === 'string' && topLevelMessage.trim()) {
+      return { code: '', message: topLevelMessage.trim() };
     }
     return { code: '', message: String(error.message || '') };
   };

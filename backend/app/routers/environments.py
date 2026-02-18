@@ -165,6 +165,20 @@ def _parse_worker_service_port(raw_port) -> int | None:
     return None
 
 
+def _is_host_environment_running_now(env: Environment) -> bool:
+    container_name = f"lyra-{env.name}-{env.id}"
+    try:
+        client = docker.from_env()
+        container = client.containers.get(container_name)
+        return container.status == "running"
+    except docker.errors.NotFound:
+        return False
+    except Exception as error:  # noqa: BLE001
+        logger.warning("Failed to check runtime status for environment %s: %s", env.id, error)
+        # Fallback to DB status when Docker lookup is temporarily unavailable.
+        return env.status == "running"
+
+
 def _format_container_state_summary(container) -> str:
     state = container.attrs.get("State", {}) if container is not None else {}
     exit_code = state.get("ExitCode")
@@ -1122,8 +1136,6 @@ async def create_jupyter_launch_url(environment_id: str, db: AsyncSession = Depe
         raise HTTPException(status_code=404, detail="Environment not found")
     if not env.enable_jupyter:
         raise HTTPException(status_code=409, detail="Jupyter is disabled for this environment")
-    if env.status != "running":
-        raise HTTPException(status_code=409, detail="Environment must be running")
 
     if env.worker_server_id:
         worker = await _assert_worker_is_ready(db, env.worker_server_id)
@@ -1163,6 +1175,12 @@ async def create_jupyter_launch_url(environment_id: str, db: AsyncSession = Depe
         }
         return {"launch_url": f"/api/environments/{environment_id}/jupyter/launch/{launch_ticket}"}
 
+    if env.status != "running" and not _is_host_environment_running_now(env):
+        raise HTTPException(status_code=409, detail="Environment must be running")
+    if env.status != "running":
+        env.status = "running"
+        await db.commit()
+
     token = await _get_jupyter_token(db, str(env.id))
     if not token:
         raise HTTPException(status_code=409, detail="Jupyter token is not configured. Recreate the environment.")
@@ -1200,13 +1218,17 @@ async def launch_jupyter_with_ticket(
         raise HTTPException(status_code=404, detail="Environment not found")
     if not env.enable_jupyter:
         raise HTTPException(status_code=409, detail="Jupyter is disabled for this environment")
-    if env.status != "running":
-        raise HTTPException(status_code=409, detail="Environment must be running")
 
     remote_launch_url = str(ticket_meta.get("remote_launch_url") or "").strip()
     if env.worker_server_id and remote_launch_url:
         ticket_meta["used"] = True
         return RedirectResponse(url=remote_launch_url, status_code=307)
+
+    if env.status != "running" and not _is_host_environment_running_now(env):
+        raise HTTPException(status_code=409, detail="Environment must be running")
+    if env.status != "running":
+        env.status = "running"
+        await db.commit()
 
     token = await _get_jupyter_token(db, str(env.id))
     if not token:
@@ -1228,8 +1250,6 @@ async def create_code_launch_url(environment_id: str, db: AsyncSession = Depends
         raise HTTPException(status_code=404, detail="Environment not found")
     if not env.enable_code_server:
         raise HTTPException(status_code=409, detail="code-server is disabled for this environment")
-    if env.status != "running":
-        raise HTTPException(status_code=409, detail="Environment must be running")
 
     if env.worker_server_id:
         worker = await _assert_worker_is_ready(db, env.worker_server_id)
@@ -1269,6 +1289,12 @@ async def create_code_launch_url(environment_id: str, db: AsyncSession = Depends
         }
         return {"launch_url": f"/api/environments/{environment_id}/code/launch/{launch_ticket}"}
 
+    if env.status != "running" and not _is_host_environment_running_now(env):
+        raise HTTPException(status_code=409, detail="Environment must be running")
+    if env.status != "running":
+        env.status = "running"
+        await db.commit()
+
     _cleanup_expired_code_tickets()
     launch_ticket = secrets.token_urlsafe(24)
     code_launch_tickets[launch_ticket] = {
@@ -1301,13 +1327,17 @@ async def launch_code_with_ticket(
         raise HTTPException(status_code=404, detail="Environment not found")
     if not env.enable_code_server:
         raise HTTPException(status_code=409, detail="code-server is disabled for this environment")
-    if env.status != "running":
-        raise HTTPException(status_code=409, detail="Environment must be running")
 
     remote_launch_url = str(ticket_meta.get("remote_launch_url") or "").strip()
     if env.worker_server_id and remote_launch_url:
         ticket_meta["used"] = True
         return RedirectResponse(url=remote_launch_url, status_code=307)
+
+    if env.status != "running" and not _is_host_environment_running_now(env):
+        raise HTTPException(status_code=409, detail="Environment must be running")
+    if env.status != "running":
+        env.status = "running"
+        await db.commit()
 
     ticket_meta["used"] = True
     scheme = request.headers.get("x-forwarded-proto", request.url.scheme)

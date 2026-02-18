@@ -236,10 +236,13 @@ async def worker_create_jupyter_launch_url(environment_id: str, db: AsyncSession
         raise HTTPException(
             status_code=409, detail={"code": "jupyter_disabled", "message": "Jupyter is disabled for this environment"}
         )
-    if env.status != "running":
+    if env.status != "running" and not env_router._is_host_environment_running_now(env):
         raise HTTPException(
             status_code=409, detail={"code": "environment_not_running", "message": "Environment must be running"}
         )
+    if env.status != "running":
+        env.status = "running"
+        await db.commit()
 
     token = await env_router._get_jupyter_token(db, str(env.id))
     if not token:
@@ -267,9 +270,12 @@ async def worker_create_code_launch_url(environment_id: str, db: AsyncSession = 
             status_code=409,
             detail={"code": "code_server_disabled", "message": "code-server is disabled for this environment"},
         )
-    if env.status != "running":
+    if env.status != "running" and not env_router._is_host_environment_running_now(env):
         raise HTTPException(
             status_code=409, detail={"code": "environment_not_running", "message": "Environment must be running"}
         )
+    if env.status != "running":
+        env.status = "running"
+        await db.commit()
 
     return _ok({"launch_url": "/", "port": env.code_port}, message="Code launch URL created")
