@@ -3,6 +3,7 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import text
+from types import SimpleNamespace
 from typing import List
 from uuid import UUID
 from ..database import get_db
@@ -467,6 +468,13 @@ async def create_environment(env: EnvironmentCreate, db: AsyncSession = Depends(
 
     if env.worker_server_id:
         worker = await _assert_worker_is_ready(db, env.worker_server_id)
+        worker_snapshot = SimpleNamespace(
+            id=worker.id,
+            name=worker.name,
+            base_url=worker.base_url,
+            api_token_encrypted=worker.api_token_encrypted,
+        )
+        worker_id = worker.id
         remote_payload = {
             "name": env.name,
             "container_user": env.container_user,
@@ -482,7 +490,7 @@ async def create_environment(env: EnvironmentCreate, db: AsyncSession = Depends(
         }
         try:
             remote_env = await call_worker_api(
-                worker,
+                worker_snapshot,
                 method="POST",
                 path="/api/worker/environments",
                 payload=remote_payload,
@@ -501,7 +509,7 @@ async def create_environment(env: EnvironmentCreate, db: AsyncSession = Depends(
         async def _cleanup_remote_environment() -> None:
             try:
                 await call_worker_api(
-                    worker,
+                    worker_snapshot,
                     method="DELETE",
                     path=f"/api/worker/environments/{remote_env_id}",
                 )
@@ -530,7 +538,7 @@ async def create_environment(env: EnvironmentCreate, db: AsyncSession = Depends(
                         created_env = Environment(
                             id=remote_env_id,
                             name=env.name,
-                            worker_server_id=worker.id,
+                            worker_server_id=worker_id,
                             container_user=env.container_user,
                             root_password="__redacted__",
                             root_password_encrypted=encrypted_root_password,

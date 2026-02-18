@@ -225,7 +225,12 @@ def test_worker_create_environment_cleans_up_remote_when_local_persist_fails(mon
     )
 
     async def _fake_assert_worker_ready(_db, _worker_id):
-        return SimpleNamespace(id=worker_id)
+        return SimpleNamespace(
+            id=worker_id,
+            name="worker-test",
+            base_url="http://worker.test:8000",
+            api_token_encrypted="encrypted-token",
+        )
 
     cleanup_calls: list[str] = []
 
