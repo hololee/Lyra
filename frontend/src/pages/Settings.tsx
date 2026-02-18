@@ -1210,7 +1210,12 @@ export default function Settings() {
                 </div>
               ))}
             </div>
-            <button type="button" onClick={() => setResourceCleanupTarget('images')} className={dangerButtonClass}>
+            <button
+              type="button"
+              onClick={() => setResourceCleanupTarget('images')}
+              className={dangerButtonClass}
+              disabled={isResourceLoading || unusedImages.length === 0}
+            >
               {t('resource.cleanupImages')}
             </button>
           </div>
@@ -1250,7 +1255,12 @@ export default function Settings() {
             <h4 className="text-[var(--text)] font-medium">{t('settings.buildCache')}</h4>
             <div className="text-sm text-[var(--text)]">{t('settings.entries')}: <span className="font-mono">{buildCache.count}</span></div>
             <div className="text-sm text-[var(--text)]">{t('settings.size')}: <span className="font-mono">{formatBytes(buildCache.size)}</span></div>
-            <button type="button" onClick={() => setResourceCleanupTarget('buildCache')} className={dangerButtonClass}>
+            <button
+              type="button"
+              onClick={() => setResourceCleanupTarget('buildCache')}
+              className={dangerButtonClass}
+              disabled={isResourceLoading || (buildCache.count <= 0 && buildCache.size <= 0)}
+            >
               {t('resource.cleanupBuildCache')}
             </button>
           </div>
