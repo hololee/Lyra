@@ -19,7 +19,6 @@ WORKER_HEALTH_AUTH_FAILED = "auth_failed"
 WORKER_HEALTH_MISCONFIGURED = "misconfigured"
 WORKER_HEALTH_API_MISMATCH = "api_mismatch"
 WORKER_HEALTH_REQUEST_FAILED = "request_failed"
-WORKER_HEALTH_INACTIVE = "inactive"
 WORKER_HEALTH_UNKNOWN = "unknown"
 
 
@@ -29,7 +28,6 @@ class WorkerConnectionConfig:
     name: str
     base_url: str
     api_token: str
-    is_active: bool
 
 
 @dataclass
@@ -119,13 +117,10 @@ def build_worker_connection_config(worker: WorkerServer) -> WorkerConnectionConf
         name=worker.name,
         base_url=normalize_worker_base_url(worker.base_url),
         api_token=token,
-        is_active=bool(worker.is_active),
     )
 
 
 async def check_worker_health(config: WorkerConnectionConfig, timeout: float | None = None) -> WorkerHealthResult:
-    if not config.is_active:
-        return WorkerHealthResult(status=WORKER_HEALTH_INACTIVE, message="Worker is inactive")
     if not config.base_url:
         return WorkerHealthResult(status=WORKER_HEALTH_MISCONFIGURED, message="Worker base URL is empty")
     if not config.api_token:

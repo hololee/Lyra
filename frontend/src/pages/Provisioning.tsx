@@ -40,7 +40,6 @@ interface EnvironmentSummary {
 interface WorkerServerOption {
   id: string;
   name: string;
-  is_active: boolean;
   last_health_status?: string;
 }
 
@@ -193,9 +192,8 @@ export default function Provisioning() {
     try {
       const res = await axios.get('worker-servers/');
       const workers = Array.isArray(res.data) ? (res.data as WorkerServerOption[]) : [];
-      const activeWorkers = workers.filter((worker) => worker.is_active);
-      setWorkerServers(activeWorkers);
-      if (executionTarget !== 'host' && !activeWorkers.some((worker) => worker.id === executionTarget)) {
+      setWorkerServers(workers);
+      if (executionTarget !== 'host' && !workers.some((worker) => worker.id === executionTarget)) {
         setExecutionTarget('host');
       }
     } catch (error) {

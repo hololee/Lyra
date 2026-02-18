@@ -261,11 +261,6 @@ async def _assert_worker_is_ready(db: AsyncSession, worker_server_id: UUID | str
             status_code=404,
             detail={"code": "worker_not_found", "message": "Worker server not found"},
         )
-    if not worker.is_active:
-        raise HTTPException(
-            status_code=409,
-            detail={"code": "worker_inactive", "message": "Worker server is inactive"},
-        )
     health = await refresh_worker_health(db, worker)
     if health.status != WORKER_HEALTH_HEALTHY:
         await db.commit()

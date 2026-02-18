@@ -42,8 +42,6 @@ async def _assert_worker_ready(db: AsyncSession, worker_id: str) -> WorkerServer
     worker = result.scalars().first()
     if not worker:
         raise HTTPException(status_code=404, detail={"code": "worker_not_found", "message": "Worker server not found"})
-    if not worker.is_active:
-        raise HTTPException(status_code=409, detail={"code": "worker_inactive", "message": "Worker server is inactive"})
     health = await refresh_worker_health(db, worker)
     await db.commit()
     if health.status != WORKER_HEALTH_HEALTHY:
@@ -124,7 +122,6 @@ async def create_worker_server(payload: WorkerServerCreate, db: AsyncSession = D
         name=name,
         base_url=base_url,
         api_token_encrypted=encrypted_token,
-        is_active=payload.is_active,
     )
     db.add(worker)
 
@@ -179,9 +176,6 @@ async def update_worker_server(worker_id: str, payload: WorkerServerUpdate, db: 
                 detail={"code": "worker_base_url_required", "message": "Worker base URL is required"},
             )
         worker.base_url = base_url
-
-    if payload.is_active is not None:
-        worker.is_active = payload.is_active
 
     if payload.api_token is not None:
         api_token = payload.api_token.strip()

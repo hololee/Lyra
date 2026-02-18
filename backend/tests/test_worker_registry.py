@@ -43,7 +43,6 @@ def test_check_worker_health_healthy(monkeypatch):
         name="worker-1",
         base_url="http://worker.local",
         api_token="token",
-        is_active=True,
     )
     result = asyncio.run(worker_registry.check_worker_health(cfg))
     assert result.status == worker_registry.WORKER_HEALTH_HEALTHY
@@ -59,7 +58,6 @@ def test_check_worker_health_auth_failed(monkeypatch):
         name="worker-1",
         base_url="http://worker.local",
         api_token="bad-token",
-        is_active=True,
     )
     result = asyncio.run(worker_registry.check_worker_health(cfg))
     assert result.status == worker_registry.WORKER_HEALTH_AUTH_FAILED
@@ -75,7 +73,6 @@ def test_check_worker_health_api_mismatch(monkeypatch):
         name="worker-1",
         base_url="http://worker.local",
         api_token="token",
-        is_active=True,
     )
     result = asyncio.run(worker_registry.check_worker_health(cfg))
     assert result.status == worker_registry.WORKER_HEALTH_API_MISMATCH
@@ -87,7 +84,6 @@ def test_build_worker_connection_config_decrypts_token(monkeypatch):
         name="worker-1",
         base_url="http://worker.local/",
         api_token_encrypted="encrypted-token",
-        is_active=True,
     )
     cfg = worker_registry.build_worker_connection_config(worker)
     assert cfg.base_url == "http://worker.local"
