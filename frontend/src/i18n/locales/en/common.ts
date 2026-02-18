@@ -320,7 +320,7 @@ const enCommon = {
     noTerminalSessions: 'No terminal sessions found.',
     terminalSessionMeta: 'Attached: {{attached}}, Windows: {{windows}}',
     killSelectedTerminalSessions: 'Kill Selected Sessions',
-    workerServersTitle: 'Worker Servers',
+    workerServersTitle: 'Worker Server Connections',
     workerServersDescription: 'Register and monitor remote worker backends for provisioning targets.',
     workerServerNamePlaceholder: 'Worker name',
     workerServerBaseUrlPlaceholder: 'Worker base URL (e.g. http://10.0.0.5:8000)',

@@ -318,7 +318,7 @@ const koCommon = {
     noTerminalSessions: '터미널 세션이 없습니다.',
     terminalSessionMeta: '연결 수: {{attached}}, 윈도우 수: {{windows}}',
     killSelectedTerminalSessions: '선택 세션 종료',
-    workerServersTitle: '워커 서버',
+    workerServersTitle: '워커 서버 연결',
     workerServersDescription: '프로비저닝 대상이 되는 원격 워커 백엔드를 등록하고 상태를 확인합니다.',
     workerServerNamePlaceholder: '워커 이름',
     workerServerBaseUrlPlaceholder: '워커 Base URL (예: http://10.0.0.5:8000)',
