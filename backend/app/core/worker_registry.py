@@ -203,7 +203,13 @@ async def check_worker_health(config: WorkerConnectionConfig, timeout: float | N
     )
 
 
-async def refresh_worker_health(db: AsyncSession, worker: WorkerServer, *, use_cache: bool = True) -> WorkerHealthResult:
+async def refresh_worker_health(
+    db: AsyncSession,
+    worker: WorkerServer,
+    *,
+    use_cache: bool = True,
+    persist: bool = True,
+) -> WorkerHealthResult:
     cache_ttl_seconds = _resolve_worker_health_cache_ttl()
     cache_key = str(worker.id)
     now_monotonic = time.monotonic()
@@ -225,16 +231,21 @@ async def refresh_worker_health(db: AsyncSession, worker: WorkerServer, *, use_c
     else:
         result = await check_worker_health(config)
 
-    worker.last_health_status = result.status
-    worker.last_health_checked_at = checked_at
-    worker.last_error_message = None if result.status == WORKER_HEALTH_HEALTHY else result.message
     _worker_health_cache[cache_key] = WorkerHealthCacheEntry(
         checked_at=checked_at,
         result=result,
         cached_at_monotonic=now_monotonic,
     )
-    await db.flush()
+    worker.last_health_status = result.status
+    worker.last_health_checked_at = checked_at
+    worker.last_error_message = None if result.status == WORKER_HEALTH_HEALTHY else result.message
+    if persist:
+        await db.flush()
     return result
+
+
+def invalidate_worker_health_cache(worker_id: str) -> None:
+    _worker_health_cache.pop(str(worker_id), None)
 
 
 async def refresh_all_worker_health(db: AsyncSession) -> list[tuple[WorkerServer, WorkerHealthResult]]:

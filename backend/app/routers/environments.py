@@ -261,14 +261,12 @@ async def _assert_worker_is_ready(db: AsyncSession, worker_server_id: UUID | str
             status_code=404,
             detail={"code": "worker_not_found", "message": "Worker server not found"},
         )
-    health = await refresh_worker_health(db, worker)
+    health = await refresh_worker_health(db, worker, persist=False)
     if health.status != WORKER_HEALTH_HEALTHY:
-        await db.commit()
         raise HTTPException(
             status_code=503,
             detail={"code": "worker_unreachable", "message": health.message},
         )
-    await db.commit()
     return worker
 
 
@@ -850,7 +848,7 @@ async def read_environments(skip: int = 0, limit: int = 100, db: AsyncSession = 
 
             healthy = worker_health_cache.get(worker.id)
             if healthy is None:
-                health = await refresh_worker_health(db, worker)
+                health = await refresh_worker_health(db, worker, persist=False)
                 healthy = health.status == WORKER_HEALTH_HEALTHY
                 worker_health_cache[worker.id] = healthy
                 worker_health_message_cache[worker.id] = health.message

@@ -123,7 +123,7 @@ def test_read_environments_multi_worker_mixed_health(monkeypatch):
     async def _fake_custom_ports_map(_db):
         return {}
 
-    async def _fake_refresh_health(_db, worker):
+    async def _fake_refresh_health(_db, worker, **_kwargs):
         if str(worker.id) == str(worker_ok.id):
             worker.last_health_status = WORKER_HEALTH_HEALTHY
             worker.last_error_message = None

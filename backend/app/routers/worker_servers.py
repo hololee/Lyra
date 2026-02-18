@@ -10,6 +10,7 @@ from ..core.worker_registry import (
     WorkerRequestError,
     call_worker_api,
     refresh_worker_health,
+    invalidate_worker_health_cache,
 )
 from ..database import get_db
 from ..models import Environment, WorkerServer
@@ -42,8 +43,7 @@ async def _assert_worker_ready(db: AsyncSession, worker_id: str) -> WorkerServer
     worker = result.scalars().first()
     if not worker:
         raise HTTPException(status_code=404, detail={"code": "worker_not_found", "message": "Worker server not found"})
-    health = await refresh_worker_health(db, worker)
-    await db.commit()
+    health = await refresh_worker_health(db, worker, persist=False)
     if health.status != WORKER_HEALTH_HEALTHY:
         raise HTTPException(status_code=503, detail={"code": "worker_unreachable", "message": health.message})
     return worker
@@ -261,4 +261,5 @@ async def delete_worker_server(worker_id: str, db: AsyncSession = Depends(get_db
 
     await db.delete(worker)
     await db.commit()
+    invalidate_worker_health_cache(worker_id)
     return None
