@@ -3,6 +3,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import func
+from uuid import UUID
 
 from ..core.security import SecretCipherError, SecretKeyError, encrypt_secret
 from ..core.worker_registry import (
@@ -240,6 +241,72 @@ async def get_worker_gpu_resources(worker_id: str, db: AsyncSession = Depends(ge
         )
     except WorkerRequestError as error:
         raise _map_worker_request_error(error) from error
+
+
+async def _get_worker_orphan_environment_ids(db: AsyncSession, worker: WorkerServer) -> list[str]:
+    remote_payload = await call_worker_api(
+        worker,
+        method="GET",
+        path="/api/worker/environments?skip=0&limit=10000",
+    )
+    remote_envs = remote_payload if isinstance(remote_payload, list) else []
+
+    remote_ids: set[str] = set()
+    for item in remote_envs:
+        if not isinstance(item, dict):
+            continue
+        raw_id = str(item.get("id", "")).strip()
+        if not raw_id:
+            continue
+        try:
+            remote_ids.add(str(UUID(raw_id)))
+        except Exception:
+            continue
+
+    local_result = await db.execute(select(Environment.id).where(Environment.worker_server_id == worker.id))
+    local_ids = {str(env_id) for env_id in local_result.scalars().all()}
+    return sorted(remote_ids - local_ids)
+
+
+@router.get("/{worker_id}/orphans")
+async def get_worker_orphans(worker_id: str, db: AsyncSession = Depends(get_db)):
+    worker = await _assert_worker_ready(db, worker_id)
+    try:
+        orphan_ids = await _get_worker_orphan_environment_ids(db, worker)
+        return {"count": len(orphan_ids), "environment_ids": orphan_ids}
+    except WorkerRequestError as error:
+        raise _map_worker_request_error(error) from error
+
+
+@router.post("/{worker_id}/orphans/cleanup")
+async def cleanup_worker_orphans(worker_id: str, db: AsyncSession = Depends(get_db)):
+    worker = await _assert_worker_ready(db, worker_id)
+    try:
+        orphan_ids = await _get_worker_orphan_environment_ids(db, worker)
+    except WorkerRequestError as error:
+        raise _map_worker_request_error(error) from error
+
+    removed: list[str] = []
+    skipped: list[dict[str, str]] = []
+
+    for orphan_id in orphan_ids:
+        try:
+            await call_worker_api(
+                worker,
+                method="DELETE",
+                path=f"/api/worker/environments/{orphan_id}",
+            )
+            removed.append(orphan_id)
+        except WorkerRequestError as error:
+            skipped.append({"id": orphan_id, "code": error.code, "message": error.message})
+
+    return {
+        "status": "ok",
+        "removed_count": len(removed),
+        "skipped_count": len(skipped),
+        "removed_ids": removed,
+        "skipped": skipped,
+    }
 
 
 @router.delete("/{worker_id}", status_code=status.HTTP_204_NO_CONTENT)

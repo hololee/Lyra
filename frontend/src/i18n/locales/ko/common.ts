@@ -333,6 +333,10 @@ const koCommon = {
     workerServerApiTokenPlaceholder: '워커 API 토큰',
     addWorkerServer: '워커 추가',
     noWorkerServers: '등록된 워커 서버가 없습니다.',
+    workerOrphanCount: 'Orphan 인스턴스: {{count}}개',
+    loadingOrphanCount: 'Orphan 인스턴스 개수 불러오는 중...',
+    orphanCountUnavailable: 'Orphan 인스턴스 개수를 확인할 수 없습니다.',
+    cleanupWorkerOrphans: 'Orphan 정리',
     active: '활성',
     checkHealth: '헬스 체크',
     workerHealthStatus: {
@@ -430,6 +434,9 @@ const koCommon = {
       workerDeleting: '워커 서버를 삭제하는 중...',
       workerDeleted: '워커 서버가 삭제되었습니다.',
       workerDeleteFailed: '워커 서버 삭제에 실패했습니다: {{message}}',
+      workerOrphanCleanupRunning: '워커 Orphan 인스턴스를 정리하는 중...',
+      workerOrphanCleanupResult: 'Orphan 정리 완료: {{removed}}개 제거, {{skipped}}개 건너뜀.',
+      workerOrphanCleanupFailed: 'Orphan 인스턴스 정리에 실패했습니다: {{message}}',
       workerErrors: {
         worker_not_found: '워커 서버를 찾을 수 없습니다.',
         worker_unreachable: '워커 서버에 연결할 수 없습니다.',

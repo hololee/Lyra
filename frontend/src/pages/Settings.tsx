@@ -62,6 +62,7 @@ export default function Settings() {
   const [announcementDraft, setAnnouncementDraft] = useState('');
   const [workerServers, setWorkerServers] = useState<WorkerServer[]>([]);
   const [workerLoading, setWorkerLoading] = useState(false);
+  const [workerOrphanCounts, setWorkerOrphanCounts] = useState<Record<string, { count: number; loading: boolean; error?: boolean }>>({});
   const [workerForm, setWorkerForm] = useState({
     name: '',
     base_url: '',
@@ -167,6 +168,48 @@ export default function Settings() {
   useEffect(() => {
     void loadWorkerServers(false);
   }, [loadWorkerServers]);
+
+  const loadWorkerOrphanCounts = useCallback(async (workers: WorkerServer[]) => {
+    if (workers.length === 0) {
+      setWorkerOrphanCounts({});
+      return;
+    }
+
+    setWorkerOrphanCounts((prev) => {
+      const next: Record<string, { count: number; loading: boolean; error?: boolean }> = {};
+      workers.forEach((worker) => {
+        next[worker.id] = { count: prev[worker.id]?.count || 0, loading: true };
+      });
+      return next;
+    });
+
+    const results = await Promise.allSettled(
+      workers.map(async (worker) => {
+        const res = await axios.get(`worker-servers/${worker.id}/orphans`);
+        return {
+          workerId: worker.id,
+          count: Number(res.data?.count || 0),
+        };
+      })
+    );
+
+    setWorkerOrphanCounts((prev) => {
+      const next = { ...prev };
+      results.forEach((result, index) => {
+        const workerId = workers[index].id;
+        if (result.status === 'fulfilled') {
+          next[workerId] = { count: result.value.count, loading: false };
+        } else {
+          next[workerId] = { count: 0, loading: false, error: true };
+        }
+      });
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    void loadWorkerOrphanCounts(workerServers);
+  }, [workerServers, loadWorkerOrphanCounts]);
 
   const loadResourceData = useCallback(async (targetMode: 'dangling' | 'unused' = imageMode) => {
     try {
@@ -682,6 +725,24 @@ export default function Settings() {
     }
   };
 
+  const handleCleanupWorkerOrphans = async (worker: WorkerServer) => {
+    try {
+      setWorkerStatus({ type: 'loading', message: t('feedback.settings.workerOrphanCleanupRunning') });
+      const res = await axios.post(`worker-servers/${worker.id}/orphans/cleanup`);
+      setWorkerStatus({
+        type: 'success',
+        message: t('feedback.settings.workerOrphanCleanupResult', {
+          removed: Number(res.data?.removed_count || 0),
+          skipped: Number(res.data?.skipped_count || 0),
+        }),
+      });
+      await loadWorkerOrphanCounts(workerServers);
+      setTimeout(() => setWorkerStatus({ type: 'idle' }), 3000);
+    } catch (error: unknown) {
+      setWorkerStatus({ type: 'error', message: localizeWorkerApiError(error, 'feedback.settings.workerOrphanCleanupFailed') });
+    }
+  };
+
   const getWorkerHealthBadgeClass = (status: string) => {
     if (status === 'healthy') return 'bg-green-500/10 text-green-500';
     if (status === 'unknown') return 'bg-gray-500/10 text-gray-400';
@@ -1133,9 +1194,30 @@ export default function Settings() {
                   </div>
                 )}
 
+                <div className="text-xs text-[var(--text-muted)]">
+                  {workerOrphanCounts[worker.id]?.loading
+                    ? t('settings.loadingOrphanCount')
+                    : workerOrphanCounts[worker.id]?.error
+                      ? t('settings.orphanCountUnavailable')
+                      : t('settings.workerOrphanCount', { count: workerOrphanCounts[worker.id]?.count || 0 })}
+                </div>
+
                 <div className="flex flex-wrap items-center gap-3">
                   <button type="button" className={secondaryButtonClass} onClick={() => { void handleCheckWorkerHealth(worker); }}>
                     {t('settings.checkHealth')}
+                  </button>
+                  <button
+                    type="button"
+                    className={dangerButtonClass}
+                    disabled={
+                      workerStatus.type === 'loading' ||
+                      workerOrphanCounts[worker.id]?.loading ||
+                      workerOrphanCounts[worker.id]?.error ||
+                      (workerOrphanCounts[worker.id]?.count || 0) === 0
+                    }
+                    onClick={() => { void handleCleanupWorkerOrphans(worker); }}
+                  >
+                    {t('settings.cleanupWorkerOrphans')}
                   </button>
                   <button type="button" className={dangerButtonClass} onClick={() => { void handleDeleteWorkerServer(worker); }}>
                     {t('actions.delete')}

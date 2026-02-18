@@ -336,6 +336,10 @@ const enCommon = {
     workerServerApiTokenPlaceholder: 'Worker API token',
     addWorkerServer: 'Add Worker',
     noWorkerServers: 'No worker servers registered.',
+    workerOrphanCount: 'Orphan instances: {{count}}',
+    loadingOrphanCount: 'Loading orphan instance count...',
+    orphanCountUnavailable: 'Orphan instance count unavailable.',
+    cleanupWorkerOrphans: 'Cleanup Orphans',
     active: 'Active',
     checkHealth: 'Check Health',
     workerHealthStatus: {
@@ -433,6 +437,9 @@ const enCommon = {
       workerDeleting: 'Deleting worker server...',
       workerDeleted: 'Worker server deleted successfully.',
       workerDeleteFailed: 'Failed to delete worker server: {{message}}',
+      workerOrphanCleanupRunning: 'Cleaning orphan instances on worker...',
+      workerOrphanCleanupResult: 'Orphan cleanup finished: {{removed}} removed, {{skipped}} skipped.',
+      workerOrphanCleanupFailed: 'Failed to cleanup orphan instances: {{message}}',
       workerErrors: {
         worker_not_found: 'Worker server not found.',
         worker_unreachable: 'Worker server is unreachable.',
