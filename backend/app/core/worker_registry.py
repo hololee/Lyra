@@ -65,9 +65,9 @@ def normalize_worker_base_url(base_url: str) -> str:
 def _resolve_worker_timeout() -> float:
     raw = (os.getenv("LYRA_WORKER_HTTP_TIMEOUT", "") or "").strip()
     try:
-        value = float(raw) if raw else 5.0
+        value = float(raw) if raw else 2.0
     except ValueError:
-        value = 5.0
+        value = 2.0
     if value < 1.0:
         return 1.0
     if value > 30.0:
