@@ -29,6 +29,13 @@ Notes:
 - `APP_SECRET_KEY` must be a valid Fernet key.
 - `ALLOW_ORIGINS` must exactly match browser origin(s) used to access Lyra.
 - `POSTGRES_PASSWORD` and `DATABASE_URL` must match.
+- Generate `APP_SECRET_KEY`:
+  ```bash
+  python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+  ```
+- `SSH_HOST_KEY_POLICY` supported values:
+  - `reject` (recommended)
+  - `accept-new`
 
 ## 2) Run services
 
@@ -132,6 +139,9 @@ LYRA_NODE_ROLE=worker
 
 Keep DB/Redis/app values configured as in section 1.
 Worker backend generates API token at startup, stores it in Docker named volume `worker_runtime_data`, and prints it in logs as plaintext.
+Recommended:
+- Use the same `APP_SECRET_KEY` as the main host.
+- Use the same `ALLOW_ORIGINS` set as the main host.
 
 3. Start worker stack (no frontend):
 ```bash
@@ -151,6 +161,11 @@ curl -H "Authorization: Bearer <TOKEN_FROM_LOG>" http://127.0.0.1:8000/api/worke
 Get token from worker backend logs:
 ```bash
 docker compose -f docker-compose.worker.yml logs backend | rg "Token:"
+```
+
+If `rg` is not available:
+```bash
+docker compose -f docker-compose.worker.yml logs backend | grep "Token:"
 ```
 
 Expected:

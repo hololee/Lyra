@@ -9,7 +9,7 @@ Lyra is a web application designed to manage GPU-enabled build environments and 
 
 ## Quick Start
 
-Server deployment guide: [`INSTRUCTIONS.md`](INSTRUCTIONS.md)
+Server deployment guide: [[`English`](instructions/INSTRUCTIONS.md) / [`한국어`](instructions/INSTRUCTIONS_KO.md)]
 
 ### Prerequisites
 - Docker & Docker Compose
