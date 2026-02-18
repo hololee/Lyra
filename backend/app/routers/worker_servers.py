@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -80,12 +82,17 @@ async def list_worker_servers(
     result = await db.execute(stmt)
     workers = result.scalars().all()
     if refresh:
-        for worker in workers:
-            try:
-                await refresh_worker_health(db, worker, use_cache=False)
-            except Exception as error:  # noqa: BLE001
+        results = await asyncio.gather(
+            *[
+                refresh_worker_health(db, worker, use_cache=False, persist=False)
+                for worker in workers
+            ],
+            return_exceptions=True,
+        )
+        for worker, refresh_result in zip(workers, results, strict=False):
+            if isinstance(refresh_result, Exception):
                 worker.last_health_status = WORKER_HEALTH_REQUEST_FAILED
-                worker.last_error_message = f"Failed to refresh worker health: {error}"
+                worker.last_error_message = f"Failed to refresh worker health: {refresh_result}"
         await db.commit()
         # Objects are expired on commit in async sessions; reload to avoid
         # response serialization hitting lazy attribute refresh (MissingGreenlet).
