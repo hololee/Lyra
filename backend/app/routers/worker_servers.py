@@ -76,7 +76,8 @@ async def list_worker_servers(
     refresh: bool = Query(default=False),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(select(WorkerServer).order_by(WorkerServer.created_at.asc(), WorkerServer.name.asc()))
+    stmt = select(WorkerServer).order_by(WorkerServer.created_at.asc(), WorkerServer.name.asc())
+    result = await db.execute(stmt)
     workers = result.scalars().all()
     if refresh:
         for worker in workers:
@@ -86,6 +87,10 @@ async def list_worker_servers(
                 worker.last_health_status = WORKER_HEALTH_REQUEST_FAILED
                 worker.last_error_message = f"Failed to refresh worker health: {error}"
         await db.commit()
+        # Objects are expired on commit in async sessions; reload to avoid
+        # response serialization hitting lazy attribute refresh (MissingGreenlet).
+        result = await db.execute(stmt)
+        workers = result.scalars().all()
     return workers
 
 
