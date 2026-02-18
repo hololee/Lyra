@@ -106,6 +106,30 @@ export default function Dashboard() {
     return translated === key ? t('status.unknown') : translated;
   };
 
+  const getApiErrorCodeAndMessage = (error: unknown): { code: string; message: string } => {
+    if (!axios.isAxiosError(error)) {
+      return { code: '', message: error instanceof Error ? error.message : String(error) };
+    }
+    const detail = error.response?.data?.detail;
+    if (detail && typeof detail === 'object') {
+      const code = String((detail as { code?: unknown }).code || '').trim();
+      const message = String((detail as { message?: unknown }).message || '').trim();
+      return { code, message };
+    }
+    return { code: '', message: String(error.message || '') };
+  };
+
+  const extractLaunchUrl = (payload: unknown): string => {
+    if (!payload || typeof payload !== 'object') return '';
+    const direct = String((payload as { launch_url?: unknown }).launch_url || '').trim();
+    if (direct) return direct;
+    const nested = (payload as { data?: unknown }).data;
+    if (nested && typeof nested === 'object') {
+      return String((nested as { launch_url?: unknown }).launch_url || '').trim();
+    }
+    return '';
+  };
+
   const parseErrorLogSections = (raw: string) => {
     const text = String(raw || '').trim();
     if (!text) {
@@ -463,14 +487,27 @@ export default function Dashboard() {
   const openJupyter = async (env: Environment) => {
     try {
       const res = await axios.post(`environments/${env.id}/jupyter/launch`);
-      const launchUrl = String(res.data.launch_url || '');
+      const launchUrl = extractLaunchUrl(res.data);
       if (!launchUrl) {
         showToast(t('feedback.dashboard.jupyterLaunchUrlMissing'), 'error');
         return;
       }
       const targetUrl = launchUrl.startsWith('http') ? launchUrl : `${window.location.origin}${launchUrl}`;
       window.open(targetUrl, '_blank', 'noopener,noreferrer');
-    } catch {
+    } catch (error: unknown) {
+      const { code, message } = getApiErrorCodeAndMessage(error);
+      if (code) {
+        const workerKey = `dashboard.workerError.${code}`;
+        const workerTranslated = t(workerKey);
+        if (workerTranslated !== workerKey) {
+          showToast(workerTranslated, 'error');
+          return;
+        }
+      }
+      if (message) {
+        showToast(message, 'error');
+        return;
+      }
       showToast(t('feedback.dashboard.jupyterOpenFailed'), 'error');
     }
   };
@@ -478,14 +515,27 @@ export default function Dashboard() {
   const openCodeServer = async (env: Environment) => {
     try {
       const res = await axios.post(`environments/${env.id}/code/launch`);
-      const launchUrl = String(res.data.launch_url || '');
+      const launchUrl = extractLaunchUrl(res.data);
       if (!launchUrl) {
         showToast(t('feedback.dashboard.codeLaunchUrlMissing'), 'error');
         return;
       }
       const targetUrl = launchUrl.startsWith('http') ? launchUrl : `${window.location.origin}${launchUrl}`;
       window.open(targetUrl, '_blank', 'noopener,noreferrer');
-    } catch {
+    } catch (error: unknown) {
+      const { code, message } = getApiErrorCodeAndMessage(error);
+      if (code) {
+        const workerKey = `dashboard.workerError.${code}`;
+        const workerTranslated = t(workerKey);
+        if (workerTranslated !== workerKey) {
+          showToast(workerTranslated, 'error');
+          return;
+        }
+      }
+      if (message) {
+        showToast(message, 'error');
+        return;
+      }
       showToast(t('feedback.dashboard.codeOpenFailed'), 'error');
     }
   };
