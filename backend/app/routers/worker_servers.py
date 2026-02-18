@@ -8,6 +8,7 @@ from uuid import UUID
 from ..core.security import SecretCipherError, SecretKeyError, encrypt_secret
 from ..core.worker_registry import (
     WORKER_HEALTH_HEALTHY,
+    WORKER_HEALTH_REQUEST_FAILED,
     WorkerRequestError,
     call_worker_api,
     refresh_worker_health,
@@ -79,7 +80,11 @@ async def list_worker_servers(
     workers = result.scalars().all()
     if refresh:
         for worker in workers:
-            await refresh_worker_health(db, worker, use_cache=False)
+            try:
+                await refresh_worker_health(db, worker, use_cache=False)
+            except Exception as error:  # noqa: BLE001
+                worker.last_health_status = WORKER_HEALTH_REQUEST_FAILED
+                worker.last_error_message = f"Failed to refresh worker health: {error}"
         await db.commit()
     return workers
 

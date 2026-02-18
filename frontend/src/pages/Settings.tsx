@@ -25,6 +25,7 @@ type WorkerServer = {
   last_health_checked_at?: string | null;
   last_error_message?: string | null;
 };
+type WorkerRef = { id: string };
 type WorkerResourceSummary = {
   imagesCount: number;
   volumesCount: number;
@@ -182,7 +183,7 @@ export default function Settings() {
     void loadWorkerServers(false);
   }, [loadWorkerServers]);
 
-  const loadWorkerOrphanCounts = useCallback(async (workers: WorkerServer[]) => {
+  const loadWorkerOrphanCounts = useCallback(async (workers: WorkerRef[]) => {
     if (workers.length === 0) {
       setWorkerOrphanCounts({});
       return;
@@ -220,11 +221,14 @@ export default function Settings() {
     });
   }, []);
 
-  useEffect(() => {
-    void loadWorkerOrphanCounts(workerServers);
-  }, [workerServers, loadWorkerOrphanCounts]);
+  const workerIdsKey = workerServers.map((worker) => worker.id).join(',');
 
-  const loadWorkerResourceSummaries = useCallback(async (workers: WorkerServer[]) => {
+  useEffect(() => {
+    const refs = workerIdsKey ? workerIdsKey.split(',').map((id) => ({ id })) : [];
+    void loadWorkerOrphanCounts(refs);
+  }, [workerIdsKey, loadWorkerOrphanCounts]);
+
+  const loadWorkerResourceSummaries = useCallback(async (workers: WorkerRef[]) => {
     if (workers.length === 0) {
       setWorkerResourceSummaries({});
       return;
@@ -285,8 +289,9 @@ export default function Settings() {
   }, []);
 
   useEffect(() => {
-    void loadWorkerResourceSummaries(workerServers);
-  }, [workerServers, loadWorkerResourceSummaries]);
+    const refs = workerIdsKey ? workerIdsKey.split(',').map((id) => ({ id })) : [];
+    void loadWorkerResourceSummaries(refs);
+  }, [workerIdsKey, loadWorkerResourceSummaries]);
 
   const loadResourceData = useCallback(async (targetMode: 'dangling' | 'unused' = imageMode) => {
     try {
@@ -822,8 +827,11 @@ export default function Settings() {
   const handleCheckWorkerHealth = async (worker: WorkerServer) => {
     try {
       setWorkerStatus({ type: 'loading', message: t('feedback.settings.workerCheckingHealth') });
-      await axios.post(`worker-servers/${worker.id}/health-check`);
-      await loadWorkerServers(false);
+      const res = await axios.post(`worker-servers/${worker.id}/health-check`);
+      const updatedWorker = res.data as WorkerServer;
+      setWorkerServers((prev) =>
+        prev.map((item) => (item.id === worker.id ? { ...item, ...updatedWorker } : item)),
+      );
       setWorkerStatus({ type: 'success', message: t('feedback.settings.workerHealthChecked') });
       setTimeout(() => setWorkerStatus({ type: 'idle' }), 2500);
     } catch (error: unknown) {
