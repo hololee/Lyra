@@ -215,6 +215,7 @@ const enCommon = {
     errorEnvironmentNameDuplicate: 'This environment name is already in use.',
     errorRootPasswordRequired: 'Root password is required.',
     errorDockerfileRequired: 'Dockerfile is required.',
+    errorMountPathPairRequired: 'Both host path and container path are required for each volume mount.',
     errorTemplateNameRequired: 'Template name is required.',
   },
   templates: {

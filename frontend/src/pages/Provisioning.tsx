@@ -2,7 +2,7 @@ import Editor from '@monaco-editor/react';
 import axios from 'axios';
 import clsx from 'clsx';
 import { Eye, EyeOff, FolderOpen, Loader2, Play, Plus, Save, Trash2, Upload } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import HostPathPickerModal from '../components/HostPathPickerModal';
@@ -157,6 +157,7 @@ export default function Provisioning() {
   const [hostPathPickerIndex, setHostPathPickerIndex] = useState<number | null>(null);
   const [hostPathPickerPrivateKey, setHostPathPickerPrivateKey] = useState<string | undefined>(undefined);
   const [mountErrors, setMountErrors] = useState<Record<number, MountRowError>>({});
+  const hostPathInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
   const [checkingBrowseIndex, setCheckingBrowseIndex] = useState<number | null>(null);
   const [customPorts, setCustomPorts] = useState<CustomPortMapping[]>([]);
   const [isAllocatingPort, setIsAllocatingPort] = useState(false);
@@ -302,7 +303,7 @@ export default function Provisioning() {
     // @ts-expect-error: indexing with dynamic field name
     newMounts[index][field] = value;
     setMounts(newMounts);
-    if (field === 'host_path') {
+    if (field === 'host_path' || field === 'container_path') {
       setMountErrors((prev) => {
         if (!prev[index]) return prev;
         const next = { ...prev };
@@ -509,6 +510,30 @@ export default function Provisioning() {
 
   const handleSubmit = async () => {
     const newErrors: {name?: string, password?: string, dockerfile?: string} = {};
+    const invalidMountErrors: Record<number, MountRowError> = {};
+
+    mounts.forEach((mount, idx) => {
+      const hasHostPath = mount.host_path.trim().length > 0;
+      const hasContainerPath = mount.container_path.trim().length > 0;
+      if (!hasHostPath || !hasContainerPath) {
+        invalidMountErrors[idx] = {
+          message: t('provisioning.errorMountPathPairRequired'),
+        };
+      }
+    });
+
+    if (Object.keys(invalidMountErrors).length > 0) {
+      setMountErrors((prev) => ({ ...prev, ...invalidMountErrors }));
+      const firstInvalidIndex = Math.min(...Object.keys(invalidMountErrors).map((key) => Number(key)));
+      window.requestAnimationFrame(() => {
+        const targetInput = hostPathInputRefs.current[firstInvalidIndex];
+        if (!targetInput) return;
+        targetInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        targetInput.focus();
+      });
+      return;
+    }
+
     const userNameValidation = validateUserName(getStoredUserName());
     if (userNameValidation.code !== 'ok') {
       newErrors.name = t('provisioning.errorUserNameRequired');
@@ -996,6 +1021,9 @@ export default function Provisioning() {
                         <div className="flex-1 relative min-w-0">
                              <FolderOpen size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
                             <input
+                                ref={(el) => {
+                                  hostPathInputRefs.current[idx] = el;
+                                }}
                                 placeholder={t('provisioning.hostPathPlaceholder')}
                                 value={mount.host_path}
                                 onChange={(e) => handleMountChange(idx, 'host_path', e.target.value)}
