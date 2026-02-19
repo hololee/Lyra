@@ -77,18 +77,8 @@ const buildManagedBlocks = (enableJupyter: boolean, enableCodeServer: boolean): 
   const blocks: string[] = [
     `${MANAGED_SSH_START}`,
     '# Managed by Lyra provisioning runtime requirements',
-    'RUN if ! command -v sshd >/dev/null 2>&1 && [ ! -x /usr/sbin/sshd ]; then \\',
-    '      (command -v apt-get >/dev/null 2>&1 && apt-get update && apt-get install -y --no-install-recommends openssh-server passwd) || \\',
-    '      (command -v apk >/dev/null 2>&1 && apk add --no-cache openssh shadow) || \\',
-    '      (command -v dnf >/dev/null 2>&1 && dnf install -y openssh-server shadow-utils) || \\',
-    '      (command -v yum >/dev/null 2>&1 && yum install -y openssh-server shadow-utils); \\',
-    '    fi && \\',
-    '    if ! command -v chpasswd >/dev/null 2>&1; then \\',
-    '      (command -v apt-get >/dev/null 2>&1 && apt-get update && apt-get install -y --no-install-recommends passwd) || \\',
-    '      (command -v apk >/dev/null 2>&1 && apk add --no-cache shadow) || \\',
-    '      (command -v dnf >/dev/null 2>&1 && dnf install -y shadow-utils) || \\',
-    '      (command -v yum >/dev/null 2>&1 && yum install -y shadow-utils); \\',
-    '    fi && \\',
+    'RUN apt-get update && apt-get install -y --no-install-recommends openssh-server passwd && \\',
+    '    rm -rf /var/lib/apt/lists/* && \\',
     '    mkdir -p /var/run/sshd /etc/ssh',
     `${MANAGED_SSH_END}`,
   ];
@@ -96,23 +86,8 @@ const buildManagedBlocks = (enableJupyter: boolean, enableCodeServer: boolean): 
     blocks.push(
       `${MANAGED_JUPYTER_START}`,
       '# Managed by Lyra provisioning service toggle',
-      'RUN if ! command -v python3 >/dev/null 2>&1 || ! python3 -m pip --version >/dev/null 2>&1; then \\',
-      '      (command -v apt-get >/dev/null 2>&1 && apt-get update && apt-get install -y --no-install-recommends python3 python3-pip) || \\',
-      '      (command -v apk >/dev/null 2>&1 && apk add --no-cache python3 py3-pip) || \\',
-      '      (command -v dnf >/dev/null 2>&1 && dnf install -y python3 python3-pip) || \\',
-      '      (command -v yum >/dev/null 2>&1 && yum install -y python3 python3-pip); \\',
-      '    fi && \\',
-      '    if command -v python3 >/dev/null 2>&1 && ! python3 -m pip --version >/dev/null 2>&1; then \\',
-      '      python3 -m ensurepip --upgrade >/dev/null 2>&1 || true; \\',
-      '    fi && \\',
-      '    if command -v python3 >/dev/null 2>&1 && ! python3 -m pip --version >/dev/null 2>&1; then \\',
-      "      python3 -c \"import urllib.request; urllib.request.urlretrieve('https://bootstrap.pypa.io/get-pip.py','/tmp/get-pip.py')\" && \\",
-      '      python3 /tmp/get-pip.py --disable-pip-version-check && rm -f /tmp/get-pip.py || true; \\',
-      '    fi && \\',
-      '    if ! command -v python3 >/dev/null 2>&1 || ! python3 -m pip --version >/dev/null 2>&1; then \\',
-      "      echo 'python3/pip are required for jupyterlab installation but were not found after package install attempts' >&2; \\",
-      '      exit 1; \\',
-      '    fi && \\',
+      'RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-pip && \\',
+      '    rm -rf /var/lib/apt/lists/* && \\',
       '    python3 -m pip install --break-system-packages --no-cache-dir jupyterlab',
       `${MANAGED_JUPYTER_END}`
     );
@@ -121,14 +96,12 @@ const buildManagedBlocks = (enableJupyter: boolean, enableCodeServer: boolean): 
     blocks.push(
       `${MANAGED_CODE_START}`,
       '# Managed by Lyra provisioning service toggle',
-      'RUN if ! command -v curl >/dev/null 2>&1; then \\',
-      '      (command -v apt-get >/dev/null 2>&1 && apt-get update && apt-get install -y --no-install-recommends curl) || \\',
-      '      (command -v apk >/dev/null 2>&1 && apk add --no-cache curl) || \\',
-      '      (command -v dnf >/dev/null 2>&1 && dnf install -y curl) || \\',
-      '      (command -v yum >/dev/null 2>&1 && yum install -y curl); \\',
-      '    fi && \\',
+      'RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates bash && \\',
+      '    rm -rf /var/lib/apt/lists/* && \\',
       '    curl -fsSL https://code-server.dev/install.sh -o /tmp/install-code-server.sh && \\',
-      '    sh /tmp/install-code-server.sh',
+      '    bash /tmp/install-code-server.sh --method=standalone && \\',
+      '    if [ -x /root/.local/bin/code-server ]; then ln -sf /root/.local/bin/code-server /usr/local/bin/code-server; fi && \\',
+      '    command -v code-server >/dev/null 2>&1',
       `${MANAGED_CODE_END}`
     );
   }
@@ -170,6 +143,7 @@ export default function Provisioning() {
   const [checkingBrowseIndex, setCheckingBrowseIndex] = useState<number | null>(null);
   const [customPorts, setCustomPorts] = useState<CustomPortMapping[]>([]);
   const [isAllocatingPort, setIsAllocatingPort] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isInitializingTargets, setIsInitializingTargets] = useState(true);
   const [userDockerfile, setUserDockerfile] = useState('FROM python:3.11-slim\n');
   const [enableJupyter, setEnableJupyter] = useState(true);
@@ -513,6 +487,8 @@ export default function Provisioning() {
   };
 
   const handleSubmit = async () => {
+    if (isSubmitting) return;
+
     const newErrors: {name?: string, password?: string, dockerfile?: string} = {};
     const invalidMountErrors: Record<number, MountRowError> = {};
 
@@ -549,7 +525,6 @@ export default function Provisioning() {
     }
     if (!password.trim()) newErrors.password = t('provisioning.errorRootPasswordRequired');
     if (!userDockerfile.trim()) newErrors.dockerfile = t('provisioning.errorDockerfileRequired');
-
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
       return;
@@ -557,6 +532,7 @@ export default function Provisioning() {
 
     // Clear errors if valid
     setErrors({});
+    setIsSubmitting(true);
 
     try {
       const envRes = await axios.get('environments/');
@@ -618,6 +594,10 @@ export default function Provisioning() {
           setErrors((prev) => ({ ...prev, dockerfile: t('provisioning.errorDockerfileRequired') }));
           return;
         }
+        if (code === 'unsupported_base_image') {
+          setErrors((prev) => ({ ...prev, dockerfile: t('provisioning.errorUnsupportedBaseImage') }));
+          return;
+        }
         if (code === 'gpu_already_allocated' || code === 'gpu_capacity_insufficient') {
           showToast(t('feedback.provisioning.allocateGpuFailed'), 'error');
           return;
@@ -660,6 +640,8 @@ export default function Provisioning() {
         }
       }
       showAlert(t('feedback.provisioning.creationFailedTitle'), t('feedback.provisioning.creationFailedMessage'));
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -829,9 +811,13 @@ export default function Provisioning() {
         <div className="flex gap-3">
           <button
             onClick={handleSubmit}
-            className="px-6 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-lg flex items-center gap-2 font-medium shadow-lg shadow-blue-500/20 transition-all hover:scale-[1.02]"
+            disabled={isSubmitting}
+            className={clsx(
+              "px-6 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg flex items-center gap-2 font-medium shadow-lg shadow-blue-500/20 transition-all",
+              isSubmitting ? "opacity-70 cursor-not-allowed" : "hover:from-blue-500 hover:to-indigo-500 hover:scale-[1.02]"
+            )}
           >
-            <Play size={18} fill="currentColor" />
+            {isSubmitting ? <Loader2 size={18} className="animate-spin" /> : <Play size={18} fill="currentColor" />}
             <span>{t('provisioning.buildRun')}</span>
           </button>
         </div>

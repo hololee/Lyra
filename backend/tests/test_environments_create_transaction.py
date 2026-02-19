@@ -154,6 +154,7 @@ def test_create_environment_rolls_back_rows_when_transaction_step_fails(monkeypa
 
     monkeypatch.setattr(env_router, "_collect_blocked_host_ports", _fake_blocked_ports)
     monkeypatch.setattr(env_router, "_allocate_ports", _fake_allocate_ports)
+    monkeypatch.setattr(env_router, "_image_has_apt_get", lambda _image: True)
     monkeypatch.setattr(env_router, "encrypt_secret", lambda _v: "encrypted-secret")
     with pytest.raises(HTTPException) as exc:
         asyncio.run(env_router.create_environment(payload, db=db))
@@ -194,6 +195,7 @@ def test_create_environment_rolls_back_rows_when_enqueue_fails(monkeypatch):
 
     monkeypatch.setattr(env_router, "_collect_blocked_host_ports", _fake_blocked_ports)
     monkeypatch.setattr(env_router, "_allocate_ports", _fake_allocate_ports)
+    monkeypatch.setattr(env_router, "_image_has_apt_get", lambda _image: True)
     monkeypatch.setattr(env_router, "encrypt_secret", lambda _v: "encrypted-secret")
     monkeypatch.setattr(env_router, "create_environment_task", _FakeDelay)
     monkeypatch.setattr(env_router.secrets, "token_urlsafe", lambda _n: "fixed-token")

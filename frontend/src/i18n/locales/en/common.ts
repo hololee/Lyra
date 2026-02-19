@@ -215,6 +215,7 @@ const enCommon = {
     errorEnvironmentNameDuplicate: 'This environment name is already in use.',
     errorRootPasswordRequired: 'Root password is required.',
     errorDockerfileRequired: 'Dockerfile is required.',
+    errorUnsupportedBaseImage: 'Unsupported base image family. Only Debian/Ubuntu-based images are supported.',
     errorMountPathPairRequired: 'Both host path and container path are required for each volume mount.',
     errorTemplateNameRequired: 'Template name is required.',
   },

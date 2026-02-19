@@ -213,6 +213,7 @@ const koCommon = {
     errorEnvironmentNameDuplicate: '이미 사용 중인 환경 이름입니다.',
     errorRootPasswordRequired: '루트 비밀번호는 필수입니다.',
     errorDockerfileRequired: 'Dockerfile은 필수입니다.',
+    errorUnsupportedBaseImage: 'Debian/Ubuntu 계열이 아닙니다. Debian/Ubuntu 계열 이미지만 지원합니다.',
     errorMountPathPairRequired: '각 볼륨 마운트에 호스트 경로와 컨테이너 경로를 모두 입력해야 합니다.',
     errorTemplateNameRequired: '템플릿 이름은 필수입니다.',
   },

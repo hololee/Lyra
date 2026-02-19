@@ -24,6 +24,7 @@ from ..schemas import (
 )
 from ..tasks import create_environment_task
 import docker
+from docker.errors import ContainerError, ImageNotFound
 import secrets
 import time
 import random
@@ -31,6 +32,7 @@ import logging
 from sqlalchemy.exc import IntegrityError
 import json
 from urllib.parse import urlsplit, urlunsplit
+import re
 
 router = APIRouter(
     prefix="/environments",
@@ -50,6 +52,41 @@ GPU_OCCUPIED_STATUSES = {"creating", "building", "running", "starting"}
 REMOTE_SURROGATE_PORT_RANGE = (61001, 65535)
 logger = logging.getLogger(__name__)
 BUILD_ERROR_SETTING_PREFIX = "build_error:"
+
+
+def _extract_dockerfile_base_image(dockerfile_content: str) -> str | None:
+    if not dockerfile_content:
+        return None
+    for raw_line in dockerfile_content.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        match = re.match(r"^FROM\s+(?:--[^\s]+\s+)*([^\s]+)(?:\s+AS\s+\S+)?$", line, flags=re.IGNORECASE)
+        if match:
+            return match.group(1)
+    return None
+
+
+def _image_has_apt_get(image_ref: str) -> bool:
+    client = docker.from_env()
+    try:
+        try:
+            client.images.get(image_ref)
+        except ImageNotFound:
+            client.images.pull(image_ref)
+
+        client.containers.run(
+            image_ref,
+            ["command -v apt-get >/dev/null 2>&1"],
+            entrypoint=["sh", "-lc"],
+            remove=True,
+            stdout=True,
+            stderr=True,
+            detach=False,
+        )
+        return True
+    except ContainerError:
+        return False
 
 
 def _is_name_unique_violation(error: IntegrityError) -> bool:
@@ -493,7 +530,6 @@ async def create_environment(env: EnvironmentCreate, db: AsyncSession = Depends(
             status_code=400,
             detail={"code": "dockerfile_required", "message": "Dockerfile content is required"},
         )
-
     existing = await db.execute(select(Environment).where(Environment.name == env.name))
     if existing.scalars().first():
         raise HTTPException(
@@ -631,6 +667,35 @@ async def create_environment(env: EnvironmentCreate, db: AsyncSession = Depends(
         except Exception:
             await _cleanup_remote_environment()
             raise
+
+    # Host-targeted provisioning validates base image capability on host Docker daemon.
+    base_image = _extract_dockerfile_base_image(env.dockerfile_content)
+    if not base_image:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "unsupported_base_image",
+                "message": "Only Debian/Ubuntu-based base images are supported",
+            },
+        )
+    try:
+        has_apt = _image_has_apt_get(base_image)
+    except Exception as error:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "base_image_validation_failed",
+                "message": f"Failed to validate base image: {error}",
+            },
+        ) from error
+    if not has_apt:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "unsupported_base_image",
+                "message": "Only Debian/Ubuntu-based base images are supported",
+            },
+        )
 
     # GPU allocation logic
     gpu_indices: list[int] = []
