@@ -49,6 +49,7 @@ GPU_ALLOCATION_LOCK_KEY = 93821
 GPU_OCCUPIED_STATUSES = {"creating", "building", "running", "starting"}
 REMOTE_SURROGATE_PORT_RANGE = (61001, 65535)
 logger = logging.getLogger(__name__)
+BUILD_ERROR_SETTING_PREFIX = "build_error:"
 
 
 def _is_name_unique_violation(error: IntegrityError) -> bool:
@@ -234,6 +235,16 @@ async def _get_jupyter_token(db: AsyncSession, environment_id: str) -> str | Non
     result = await db.execute(select(Setting).where(Setting.key == key))
     token_setting = result.scalars().first()
     return token_setting.value if token_setting else None
+
+
+async def _get_build_error_message(db: AsyncSession, environment_id: str) -> str | None:
+    key = f"{BUILD_ERROR_SETTING_PREFIX}{environment_id}"
+    result = await db.execute(select(Setting).where(Setting.key == key))
+    setting = result.scalars().first()
+    if not setting:
+        return None
+    value = str(setting.value or "").strip()
+    return value or None
 
 
 def _normalize_custom_ports(raw_ports) -> list[dict]:
@@ -1131,6 +1142,15 @@ async def get_environment_logs(environment_id: str, db: AsyncSession = Depends(g
         return {"logs": logs_text}
     except docker.errors.NotFound:
         if env.status == "error":
+            build_error_message = await _get_build_error_message(db, str(env.id))
+            if build_error_message:
+                return {
+                    "logs": (
+                        "No container was created for this environment. Build may have failed before container start.\n\n"
+                        "[Build Failure Details]\n"
+                        f"{build_error_message}"
+                    )
+                }
             return {
                 "logs": "No container was created for this environment. Build may have failed before container start. Check backend worker logs for the full build error."  # noqa: E501
             }
@@ -1444,6 +1464,12 @@ async def delete_environment(
         custom_ports_setting = custom_ports_result.scalars().first()
         if custom_ports_setting:
             await db.delete(custom_ports_setting)
+
+        build_error_key = f"{BUILD_ERROR_SETTING_PREFIX}{env.id}"
+        build_error_result = await db.execute(select(Setting).where(Setting.key == build_error_key))
+        build_error_setting = build_error_result.scalars().first()
+        if build_error_setting:
+            await db.delete(build_error_setting)
 
         await db.delete(env)
         await db.commit()

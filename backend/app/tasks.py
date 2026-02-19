@@ -21,6 +21,28 @@ engine = create_engine(SYNC_DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine)
 CONTAINER_RUN_PORT_RETRIES = 3
 CUSTOM_HOST_PORT_RANGE = (35001, 60000)
+BUILD_ERROR_SETTING_PREFIX = "build_error:"
+
+
+def _build_error_key(environment_id: str) -> str:
+    return f"{BUILD_ERROR_SETTING_PREFIX}{environment_id}"
+
+
+def _set_build_error(db, environment_id: str, message: str) -> None:
+    key = _build_error_key(environment_id)
+    value = (message or "").strip()[:12000]
+    setting = db.query(Setting).filter(Setting.key == key).first()
+    if setting:
+        setting.value = value
+    else:
+        db.add(Setting(key=key, value=value))
+
+
+def _clear_build_error(db, environment_id: str) -> None:
+    key = _build_error_key(environment_id)
+    setting = db.query(Setting).filter(Setting.key == key).first()
+    if setting:
+        db.delete(setting)
 
 
 def _is_enabled(value, default: bool = True) -> bool:
@@ -264,6 +286,7 @@ def _allocate_custom_host_ports(db, count: int, exclude_environment_id=None):
 def create_environment_task(self, environment_id):
     db = SessionLocal()
     env = db.query(Environment).filter(Environment.id == environment_id).first()
+    env_id = str(environment_id)
 
     if not env:
         return f"Environment {environment_id} not found"
@@ -271,6 +294,7 @@ def create_environment_task(self, environment_id):
     try:
         # Update status to building
         env.status = "building"
+        _clear_build_error(db, env_id)
         db.commit()
 
         print(f"[Task] Processing environment {env.id}")
@@ -296,6 +320,7 @@ def create_environment_task(self, environment_id):
             except Exception as build_error:
                 print(f"[Task] Build failed: {build_error}")
                 env.status = "error"
+                _set_build_error(db, env_id, f"Build failed: {build_error}")
                 db.commit()
                 return f"Failed to build image: {str(build_error)}"
         else:
@@ -331,6 +356,7 @@ def create_environment_task(self, environment_id):
 
         if not env.root_password_encrypted:
             env.status = "error"
+            _set_build_error(db, env_id, "Runtime provisioning failed: Missing encrypted root password")
             db.commit()
             return "password_decryption_failed Missing encrypted root password"
 
@@ -338,10 +364,12 @@ def create_environment_task(self, environment_id):
             root_password = decrypt_secret(env.root_password_encrypted)
         except SecretKeyError as error:
             env.status = "error"
+            _set_build_error(db, env_id, f"Runtime provisioning failed: {error}")
             db.commit()
             return f"password_decryption_failed {error}"
         except SecretCipherError as error:
             env.status = "error"
+            _set_build_error(db, env_id, f"Runtime provisioning failed: {error}")
             db.commit()
             return f"password_decryption_failed {error}"
 
@@ -353,6 +381,7 @@ def create_environment_task(self, environment_id):
         )
         if isinstance(jupyter_mode, str) and jupyter_mode.startswith("missing_prerequisite:"):
             env.status = "error"
+            _set_build_error(db, env_id, jupyter_mode)
             db.commit()
             return jupyter_mode
 
@@ -430,12 +459,14 @@ def create_environment_task(self, environment_id):
                 db.commit()
 
         env.status = "running"
+        _clear_build_error(db, env_id)
         db.commit()
 
         return f"Environment {env.name} created successfully"
 
     except Exception as e:
         env.status = "error"
+        _set_build_error(db, env_id, f"Environment creation failed: {e}")
         db.commit()
         return f"Error creating environment: {str(e)}"
     finally:
