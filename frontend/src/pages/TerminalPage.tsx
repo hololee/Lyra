@@ -7,6 +7,7 @@ import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import 'xterm/css/xterm.css';
 import { decrypt } from '../utils/crypto';
+import { isSshClientConfigReady, readStoredSshClientConfig, toSshConnectPayload } from '../utils/sshClientConfig';
 
 const XTERM_DARK_THEME = {
   background: '#000000',
@@ -103,6 +104,7 @@ export default function TerminalPage() {
   const [authMethod, setAuthMethod] = useState<string | null>(null);
   const [tabs, setTabs] = useState<TerminalTab[]>(getInitialTabs);
   const [activeTabId, setActiveTabId] = useState<string>(() => getInitialActiveTabId(getInitialTabs()));
+  const sshConfigRef = useRef<ReturnType<typeof toSshConnectPayload> | null>(null);
   const decryptedPrivateKeyRef = useRef<string | null>(null);
   const pendingTabCommandsRef = useRef<Record<string, string>>({});
   const terminalMessagesRef = useRef({
@@ -196,28 +198,20 @@ export default function TerminalPage() {
   // Check auth method and configuration first
   useEffect(() => {
     const checkAuth = async () => {
-        try {
-            const [methodRes, userRes] = await Promise.all([
-                axios.get('settings/ssh_auth_method'),
-                axios.get('settings/ssh_username')
-            ]);
+        const stored = readStoredSshClientConfig();
+        if (!stored.host) {
+          stored.host = window.location.hostname;
+        }
+        if (!isSshClientConfigReady(stored, { requireAuth: false })) {
+          setIsConfigured(false);
+          return;
+        }
+        setAuthMethod(stored.authMethod);
+        sshConfigRef.current = toSshConnectPayload(stored);
+        setIsConfigured(true);
 
-            const method = methodRes.data.value;
-            const username = userRes.data.value;
-
-            if (!username) {
-                setIsConfigured(false);
-                return;
-            }
-
-            setAuthMethod(method);
-            setIsConfigured(true);
-
-            if (method !== 'key') {
-                setIsUnlocked(true); // Don't need password if not using key
-            }
-        } catch {
-            setIsConfigured(false);
+        if (stored.authMethod !== 'key') {
+          setIsUnlocked(true); // Don't need password if not using key
         }
     };
     checkAuth();
@@ -286,6 +280,7 @@ export default function TerminalPage() {
           JSON.stringify({
             type: 'INIT',
             privateKey,
+            sshConfig: sshConfigRef.current,
             sessionKey: tab?.sessionKey ?? `lyra_${tabId.replace(/[^a-zA-Z0-9_-]/g, '_')}`,
             rows: term.rows,
             cols: term.cols,
@@ -411,6 +406,7 @@ export default function TerminalPage() {
       try {
         await axios.post('terminal/tmux/sessions/kill', {
           privateKey,
+          sshConfig: sshConfigRef.current,
           session_names: [targetTab.sessionKey],
         });
       } catch {

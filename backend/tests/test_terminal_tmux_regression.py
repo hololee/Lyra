@@ -53,7 +53,7 @@ class _FakeSshClient:
 
 
 def test_list_tmux_sessions_maps_common_host_error(monkeypatch):
-    async def _fake_connect_terminal_ssh(_db, _private_key=None):
+    async def _fake_connect_terminal_ssh(_db, _private_key=None, _ssh_config=None):
         raise RuntimeError("ssh missing")
 
     monkeypatch.setattr(terminal, "_connect_terminal_ssh", _fake_connect_terminal_ssh)
@@ -78,7 +78,7 @@ def test_list_tmux_sessions_parses_formatted_output(monkeypatch):
     out = "lyra_a\\t1\\t2\nlyra_b\\t0\\t1\n__FALLBACK__\n"
     ssh_client = _FakeSshClient(out=out)
 
-    async def _fake_connect_terminal_ssh(_db, _private_key=None):
+    async def _fake_connect_terminal_ssh(_db, _private_key=None, _ssh_config=None):
         return ssh_client
 
     monkeypatch.setattr(terminal, "_connect_terminal_ssh", _fake_connect_terminal_ssh)
@@ -99,7 +99,7 @@ def test_list_tmux_sessions_parses_formatted_output(monkeypatch):
 def test_kill_tmux_sessions_returns_not_installed_when_missing(monkeypatch):
     ssh_client = _FakeSshClient(out="__NO_TMUX__")
 
-    async def _fake_connect_terminal_ssh(_db, _private_key=None):
+    async def _fake_connect_terminal_ssh(_db, _private_key=None, _ssh_config=None):
         return ssh_client
 
     monkeypatch.setattr(terminal, "_connect_terminal_ssh", _fake_connect_terminal_ssh)

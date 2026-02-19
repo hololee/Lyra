@@ -11,6 +11,7 @@ import OverlayPortal from '../components/OverlayPortal';
 import { useTheme } from '../context/ThemeContext';
 import { useToast } from '../context/ToastContext';
 import { decrypt } from '../utils/crypto';
+import { isSshClientConfigReady, readStoredSshClientConfig, toSshConnectPayload } from '../utils/sshClientConfig';
 import { buildPrefixedEnvironmentName, getStoredUserName, validateUserName } from '../utils/userIdentity';
 
 interface MountPoint {
@@ -163,6 +164,7 @@ export default function Provisioning() {
   const [mounts, setMounts] = useState<MountPoint[]>([]);
   const [hostPathPickerIndex, setHostPathPickerIndex] = useState<number | null>(null);
   const [hostPathPickerPrivateKey, setHostPathPickerPrivateKey] = useState<string | undefined>(undefined);
+  const [hostPathPickerSshConfig, setHostPathPickerSshConfig] = useState<ReturnType<typeof toSshConnectPayload> | undefined>(undefined);
   const [mountErrors, setMountErrors] = useState<Record<number, MountRowError>>({});
   const hostPathInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
   const [checkingBrowseIndex, setCheckingBrowseIndex] = useState<number | null>(null);
@@ -345,26 +347,8 @@ export default function Provisioning() {
     });
 
     try {
-      const fetchSettingValue = async (key: string): Promise<string> => {
-        try {
-          const res = await axios.get(`settings/${key}`);
-          return String(res.data?.value ?? '').trim();
-        } catch (error) {
-          if (axios.isAxiosError(error) && error.response?.status === 404) {
-            return '';
-          }
-          throw error;
-        }
-      };
-
-      // Step 1: check required SSH settings exist.
-      const [sshHost, sshUser, authMethodRaw] = await Promise.all([
-        fetchSettingValue('ssh_host'),
-        fetchSettingValue('ssh_username'),
-        fetchSettingValue('ssh_auth_method'),
-      ]);
-      const authMethod = (authMethodRaw || 'password').toLowerCase();
-      const sshPassword = authMethod === 'password' ? await fetchSettingValue('ssh_password') : '';
+      const stored = readStoredSshClientConfig();
+      const authMethod = stored.authMethod;
       let browsePrivateKey: string | undefined;
 
       if (authMethod === 'key') {
@@ -386,19 +370,31 @@ export default function Provisioning() {
         }
       }
 
-      // Backend defaults missing ssh_port to 22, so port is not required in frontend precheck.
-      const hasBasic = Boolean(sshHost && sshUser && authMethod);
-      const hasAuth = authMethod === 'password' ? Boolean(sshPassword) : Boolean(browsePrivateKey);
-      if (!hasBasic || !hasAuth) {
+      const sshConfig = {
+        host: stored.host || window.location.hostname,
+        port: stored.port || '22',
+        username: stored.username,
+        authMethod: stored.authMethod,
+        password: stored.password || '',
+        hostFingerprint: stored.hostFingerprint || '',
+      };
+      const hasAuth = authMethod === 'password' ? Boolean(sshConfig.password) : Boolean(browsePrivateKey);
+      if (!isSshClientConfigReady(sshConfig, { requireAuth: false }) || !hasAuth) {
         setMountError(index, t('provisioning.errorHostConnectionSettingsRequired'), true);
         return;
       }
 
       // Step 2: verify real API connectivity before opening picker.
       const probePath = mounts[index]?.host_path?.trim() || '/';
-      const res = await axios.post('filesystem/host/list', { path: probePath, privateKey: browsePrivateKey });
+      const apiSshConfig = toSshConnectPayload(sshConfig);
+      const res = await axios.post('filesystem/host/list', {
+        path: probePath,
+        privateKey: browsePrivateKey,
+        sshConfig: apiSshConfig,
+      });
       if (res.data?.status === 'success') {
         setHostPathPickerPrivateKey(browsePrivateKey);
+        setHostPathPickerSshConfig(apiSshConfig);
         setHostPathPickerIndex(index);
         return;
       }
@@ -421,6 +417,7 @@ export default function Provisioning() {
   const handleCloseHostPathPicker = () => {
     setHostPathPickerIndex(null);
     setHostPathPickerPrivateKey(undefined);
+    setHostPathPickerSshConfig(undefined);
   };
 
   const goToSettingsForSsh = () => {
@@ -749,6 +746,7 @@ export default function Provisioning() {
         onClose={handleCloseHostPathPicker}
         initialPath={hostPathPickerIndex !== null ? mounts[hostPathPickerIndex]?.host_path : '/'}
         privateKey={hostPathPickerPrivateKey}
+        sshConfig={hostPathPickerSshConfig}
         onSelect={(selectedPath) => {
           if (hostPathPickerIndex === null) return;
           handleMountChange(hostPathPickerIndex, 'host_path', selectedPath);

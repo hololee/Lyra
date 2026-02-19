@@ -51,7 +51,6 @@ def test_get_settings_filters_internal_keys():
         Setting(key="app_name", value="Lyra"),
         Setting(key="jupyter_token:abc", value="secret"),
         Setting(key="custom_ports:xyz", value="[]"),
-        Setting(key="ssh_username", value="root"),
         Setting(key="unknown_key", value="x"),
     ]
     db = _FakeDb(settings)
@@ -59,7 +58,7 @@ def test_get_settings_filters_internal_keys():
     result = asyncio.run(get_settings(db=db))
 
     keys = [item.key for item in result]
-    assert keys == ["app_name", "ssh_username"]
+    assert keys == ["app_name"]
 
 
 def test_get_setting_blocks_internal_key_access():

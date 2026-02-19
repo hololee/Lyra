@@ -4,12 +4,6 @@ ALLOWED_SETTING_KEYS = {
     "app_name",
     "favicon_data_url",
     "dashboard_announcement_markdown",
-    "ssh_port",
-    "ssh_host",
-    "ssh_username",
-    "ssh_auth_method",
-    "ssh_password",
-    "ssh_host_fingerprint",
 }
 
 INTERNAL_SETTING_KEY_PREFIXES = (

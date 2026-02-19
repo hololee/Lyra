@@ -35,24 +35,27 @@ def test_resolve_ssh_target_host_maps_localhost_variants():
 def test_connect_host_ssh_applies_localhost_mapping(monkeypatch):
     captured = {}
 
-    async def _fake_load_host_ssh_settings(_db):
-        return ssh_host.HostSshSettings(
-            host="localhost",
-            port=22,
-            username="root",
-            auth_method="password",
-            password="pw",
-            host_fingerprint="SHA256:abc",
-        )
-
     def _fake_connect_ssh(**kwargs):
         captured.update(kwargs)
         return object()
 
-    monkeypatch.setattr(ssh_host, "load_host_ssh_settings", _fake_load_host_ssh_settings)
     monkeypatch.setattr(ssh_host, "connect_ssh", _fake_connect_ssh)
 
-    result = asyncio.run(ssh_host.connect_host_ssh(db=object(), private_key="key", timeout=7))
+    result = asyncio.run(
+        ssh_host.connect_host_ssh(
+            db=object(),
+            ssh_config={
+                "host": "localhost",
+                "port": 22,
+                "username": "root",
+                "authMethod": "password",
+                "password": "pw",
+                "hostFingerprint": "SHA256:abc",
+            },
+            private_key="key",
+            timeout=7,
+        )
+    )
 
     assert result is not None
     assert captured["host"] == "host.docker.internal"

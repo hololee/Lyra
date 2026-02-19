@@ -9,6 +9,12 @@ import { decrypt, encrypt } from '../utils/crypto';
 import OverlayPortal from '../components/OverlayPortal';
 import Modal from '../components/Modal';
 import { getStoredUserName, setStoredUserName } from '../utils/userIdentity';
+import {
+  isSshClientConfigReady,
+  readStoredSshClientConfig,
+  toSshConnectPayload,
+  writeStoredSshClientConfig,
+} from '../utils/sshClientConfig';
 
 type StatusState = { type: 'idle' | 'loading' | 'success' | 'error'; message?: string };
 type TmuxSession = { name: string; attached: number; windows: number };
@@ -120,39 +126,30 @@ export default function Settings() {
   }, [announcementMarkdown]);
 
   useEffect(() => {
-    const fetchSshSettings = async () => {
-      try {
-        setIsSettingsLoading(true);
-        const keys = ['ssh_port', 'ssh_username', 'ssh_auth_method', 'ssh_password'];
-        const settings: Record<string, string> = {};
+    setIsSettingsLoading(true);
+    const saved = readStoredSshClientConfig();
+    const savedKeyName = localStorage.getItem('ssh_key_name') || '';
+    setSshSettings((prev) => ({
+      ...prev,
+      port: saved.port || '22',
+      username: saved.username || '',
+      authMethod: saved.authMethod || 'password',
+      password: saved.password || '',
+      keyName: savedKeyName,
+    }));
+    setIsSettingsLoading(false);
+  }, []);
 
-        await Promise.all(keys.map(async (key) => {
-          try {
-            const res = await axios.get(`settings/${key}`);
-            settings[key] = res.data.value;
-          } catch {
-            // Setting might not exist yet
-          }
-        }));
-
-        const savedKeyName = localStorage.getItem('ssh_key_name') || '';
-
-        setSshSettings(prev => ({
-          ...prev,
-          port: settings.ssh_port || '22',
-          username: settings.ssh_username || '',
-          authMethod: settings.ssh_auth_method || 'password',
-          password: settings.ssh_password || '',
-          keyName: savedKeyName,
-        }));
-      } catch (error) {
-        console.error("Failed to fetch SSH settings", error);
-      } finally {
-        setIsSettingsLoading(false);
-      }
+  const getSavedSshConfig = useCallback(() => {
+    const saved = readStoredSshClientConfig();
+    return {
+      host: saved.host || window.location.hostname,
+      port: saved.port || '22',
+      username: saved.username || '',
+      authMethod: (saved.authMethod || 'password') as 'password' | 'key',
+      password: saved.password || '',
+      hostFingerprint: saved.hostFingerprint || '',
     };
-
-    fetchSshSettings();
   }, []);
 
   const loadWorkerServers = useCallback(async (refresh = false) => {
@@ -455,19 +452,11 @@ export default function Settings() {
         return;
       }
 
-      const updates = [
-        { key: 'ssh_host', value: window.location.hostname },
-        { key: 'ssh_port', value: sshSettings.port },
-        { key: 'ssh_username', value: sshSettings.username },
-        { key: 'ssh_auth_method', value: sshSettings.authMethod },
-      ];
-
       if (sshSettings.authMethod === 'password') {
         if (!sshSettings.password.trim()) {
           setSshStatus({ type: 'error', message: t('feedback.settings.sshPasswordRequired') });
           return;
         }
-        updates.push({ key: 'ssh_password', value: sshSettings.password });
       }
 
       // Handle Key Encryption and Storage
@@ -487,9 +476,17 @@ export default function Settings() {
         // If they have keyName but no privateKey in state, it means they are using existing key
       }
 
-      await Promise.all(updates.map(u => axios.put(`settings/${u.key}`, { value: u.value })));
+      writeStoredSshClientConfig({
+        host: window.location.hostname,
+        port: sshSettings.port,
+        username: sshSettings.username,
+        authMethod: sshSettings.authMethod as 'password' | 'key',
+        password: sshSettings.authMethod === 'password' ? sshSettings.password : '',
+        hostFingerprint: '',
+      });
 
       setSshStatus({ type: 'success', message: t('feedback.settings.sshSettingsUpdated') });
+      void loadTmuxSessions();
       setTimeout(() => setSshStatus({ type: 'idle' }), 3000);
     } catch (error) {
       console.error(error);
@@ -507,12 +504,16 @@ export default function Settings() {
           return;
       }
 
-      const res = await axios.post('terminal/test-ssh', {
+      const config = {
         host: window.location.hostname,
-        port: parseInt(sshSettings.port),
+        port: sshSettings.port,
         username: sshSettings.username,
-        authMethod: sshSettings.authMethod,
+        authMethod: sshSettings.authMethod as 'password' | 'key',
         password: sshSettings.password,
+        hostFingerprint: '',
+      };
+      const res = await axios.post('terminal/test-ssh', {
+        ...toSshConnectPayload(config),
         privateKey: keyToTest,
       });
 
@@ -528,7 +529,8 @@ export default function Settings() {
   };
 
   const resolvePrivateKeyForTmuxOps = useCallback(async (): Promise<string | undefined> => {
-    if (sshSettings.authMethod !== 'key') return undefined;
+    const savedConfig = getSavedSshConfig();
+    if (savedConfig.authMethod !== 'key') return undefined;
     if (sshSettings.privateKey) return sshSettings.privateKey;
 
     const encrypted = localStorage.getItem('ssh_private_key_encrypted');
@@ -543,14 +545,21 @@ export default function Settings() {
     } catch {
       throw new Error(t('feedback.settings.tmuxKeyDecryptFailed'));
     }
-  }, [sshSettings.authMethod, sshSettings.privateKey, sshSettings.masterPassword, t]);
+  }, [getSavedSshConfig, sshSettings.privateKey, sshSettings.masterPassword, t]);
 
   const loadTmuxSessions = useCallback(async () => {
     try {
       setTmuxLoading(true);
+      const sshConfig = getSavedSshConfig();
+      if (!isSshClientConfigReady(sshConfig)) {
+        setSessionStatus({ type: 'error', message: t('feedback.settings.tmuxSessionsLoadFailed') });
+        setTmuxSessions([]);
+        return;
+      }
       const privateKey = await resolvePrivateKeyForTmuxOps();
       const res = await axios.post('terminal/tmux/sessions/list', {
         privateKey,
+        sshConfig: toSshConnectPayload(sshConfig),
       });
       if (res.data?.status !== 'success') {
         setSessionStatus({
@@ -575,7 +584,7 @@ export default function Settings() {
     } finally {
       setTmuxLoading(false);
     }
-  }, [resolvePrivateKeyForTmuxOps, t]);
+  }, [getSavedSshConfig, resolvePrivateKeyForTmuxOps, t]);
 
   useEffect(() => {
     if (isSettingsLoading) return;
@@ -590,9 +599,15 @@ export default function Settings() {
 
     try {
       setTmuxLoading(true);
+      const sshConfig = getSavedSshConfig();
+      if (!isSshClientConfigReady(sshConfig)) {
+        setSessionStatus({ type: 'error', message: t('feedback.settings.tmuxSessionsKillFailed') });
+        return;
+      }
       const privateKey = await resolvePrivateKeyForTmuxOps();
       const res = await axios.post('terminal/tmux/sessions/kill', {
         privateKey,
+        sshConfig: toSshConnectPayload(sshConfig),
         session_names: selectedTmuxSessions,
       });
       if (res.data?.status !== 'success') {

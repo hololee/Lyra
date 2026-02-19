@@ -3,8 +3,6 @@ import asyncio
 import logging
 from ..database import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
-from ..models import Setting
 import json
 from pydantic import BaseModel
 from typing import Optional
@@ -32,20 +30,29 @@ class SshTestRequest(BaseModel):
     hostFingerprint: Optional[str] = None
 
 
+class HostSshConfigPayload(BaseModel):
+    host: str
+    port: int
+    username: str
+    authMethod: str
+    password: Optional[str] = None
+    hostFingerprint: Optional[str] = None
+
+
 class TmuxSessionListRequest(BaseModel):
     privateKey: Optional[str] = None
+    sshConfig: Optional[HostSshConfigPayload] = None
 
 
 class TmuxSessionKillRequest(BaseModel):
     privateKey: Optional[str] = None
     session_names: list[str]
+    sshConfig: Optional[HostSshConfigPayload] = None
 
 
 @router.post("/test-ssh")
-async def test_ssh_connection(req: SshTestRequest, db: AsyncSession = Depends(get_db)):
+async def test_ssh_connection(req: SshTestRequest):
     try:
-        configured_fingerprint = await get_setting_value(db, "ssh_host_fingerprint")
-        fingerprint = req.hostFingerprint if req.hostFingerprint is not None else configured_fingerprint
         ssh_client = connect_ssh(
             host=req.host,
             port=req.port,
@@ -53,7 +60,7 @@ async def test_ssh_connection(req: SshTestRequest, db: AsyncSession = Depends(ge
             auth_method=req.authMethod,
             password=req.password,
             private_key=req.privateKey,
-            host_fingerprint=fingerprint,
+            host_fingerprint=req.hostFingerprint,
             timeout=5,
         )
         ssh_client.close()
@@ -61,12 +68,6 @@ async def test_ssh_connection(req: SshTestRequest, db: AsyncSession = Depends(ge
     except Exception as e:
         code, message = map_ssh_error(e)
         return {"status": "error", "code": code, "message": message}
-
-
-async def get_setting_value(db: AsyncSession, key: str, default: str = "") -> str:
-    result = await db.execute(select(Setting).where(Setting.key == key))
-    setting = result.scalars().first()
-    return setting.value if setting else default
 
 
 async def _send_ws_error(websocket: WebSocket, code: str, message: str):
@@ -91,9 +92,14 @@ def _sanitize_tmux_session_name(raw: str) -> Optional[str]:
     return value
 
 
-async def _connect_terminal_ssh(db: AsyncSession, private_key: Optional[str] = None):
+async def _connect_terminal_ssh(
+    db: AsyncSession,
+    private_key: Optional[str] = None,
+    ssh_config: Optional[dict] = None,
+):
     return await connect_host_ssh(
         db,
+        ssh_config=ssh_config,
         private_key=private_key,
         timeout=10,
     )
@@ -125,7 +131,11 @@ _TMUX_BIN_SNIPPET = (
 async def list_tmux_sessions(req: TmuxSessionListRequest, db: AsyncSession = Depends(get_db)):
     ssh_client = None
     try:
-        ssh_client = await _connect_terminal_ssh(db, req.privateKey)
+        ssh_client = await _connect_terminal_ssh(
+            db,
+            req.privateKey,
+            req.sshConfig.model_dump() if req.sshConfig else None,
+        )
         cmd = (
             f"{_TMUX_BIN_SNIPPET}"
             "if [ -z \"$TMUX_BIN\" ]; then echo __NO_TMUX__; exit 0; fi; "
@@ -204,7 +214,11 @@ async def kill_tmux_sessions(req: TmuxSessionKillRequest, db: AsyncSession = Dep
 
     ssh_client = None
     try:
-        ssh_client = await _connect_terminal_ssh(db, req.privateKey)
+        ssh_client = await _connect_terminal_ssh(
+            db,
+            req.privateKey,
+            req.sshConfig.model_dump() if req.sshConfig else None,
+        )
         check_cmd = f"{_TMUX_BIN_SNIPPET}if [ -z \"$TMUX_BIN\" ]; then echo __NO_TMUX__; fi"
         _, check_out, _ = _exec_ssh_command(ssh_client, check_cmd, timeout=10)
         if "__NO_TMUX__" in check_out:
@@ -260,6 +274,7 @@ async def websocket_terminal(websocket: WebSocket, db: AsyncSession = Depends(ge
             return
 
         ssh_key = init_data.get("privateKey")
+        ssh_config = init_data.get("sshConfig")
         session_key = _sanitize_session_key(init_data.get("sessionKey"))
         cols = init_data.get("cols", 80)
         rows = init_data.get("rows", 24)
@@ -267,6 +282,7 @@ async def websocket_terminal(websocket: WebSocket, db: AsyncSession = Depends(ge
         try:
             ssh_client = await connect_host_ssh(
                 db,
+                ssh_config=ssh_config,
                 private_key=ssh_key,
                 timeout=10,
             )

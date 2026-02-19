@@ -20,6 +20,7 @@ MAX_HOST_FS_ENTRIES = 500
 class HostFsListRequest(BaseModel):
     path: str | None = "/"
     privateKey: str | None = None
+    sshConfig: dict | None = None
 
 
 def _normalize_host_path(path: str | None) -> str:
@@ -90,6 +91,7 @@ async def list_host_directory(req: HostFsListRequest, db: AsyncSession = Depends
     try:
         ssh_client = await connect_host_ssh(
             db,
+            ssh_config=req.sshConfig,
             private_key=req.privateKey,
             timeout=10,
         )

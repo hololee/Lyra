@@ -32,6 +32,7 @@ interface HostPathPickerModalProps {
   onSelect: (path: string) => void;
   initialPath?: string;
   privateKey?: string;
+  sshConfig?: Record<string, unknown>;
 }
 
 const normalizePath = (value?: string): string => {
@@ -46,6 +47,7 @@ export default function HostPathPickerModal({
   onSelect,
   initialPath,
   privateKey,
+  sshConfig,
 }: HostPathPickerModalProps) {
   const { t } = useTranslation();
   const [currentPath, setCurrentPath] = useState('/');
@@ -78,7 +80,7 @@ export default function HostPathPickerModal({
     try {
       const res = await axios.post<HostPathListSuccessResponse | HostPathListErrorResponse>(
         'filesystem/host/list',
-        { path: normalized, privateKey },
+        { path: normalized, privateKey, sshConfig },
         { signal: controller.signal }
       );
 
@@ -115,7 +117,7 @@ export default function HostPathPickerModal({
         setIsLoading(false);
       }
     }
-  }, [privateKey]);
+  }, [privateKey, sshConfig]);
 
   useEffect(() => {
     if (!isOpen) return;
