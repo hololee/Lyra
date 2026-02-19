@@ -907,7 +907,7 @@ export default function Dashboard() {
 
           {isNoticeOpen && (
             <div className="p-6">
-              <div className="text-sm text-[var(--text)] [&_a]:text-blue-500 [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-[var(--border)] [&_blockquote]:pl-3 [&_h1]:mt-4 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:mt-4 [&_h2]:text-lg [&_h2]:font-semibold [&_li]:ml-5 [&_li]:list-disc [&_p]:mt-2">
+              <div className="text-sm text-[var(--text)] [&_a]:text-blue-500 [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-[var(--border)] [&_blockquote]:pl-3 [&_h1]:mt-4 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:mt-4 [&_h2]:text-lg [&_h2]:font-semibold [&_ul_li]:ml-5 [&_ul_li]:list-disc [&_ol_li]:ml-5 [&_ol_li]:list-decimal [&_p]:mt-2">
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   components={{
