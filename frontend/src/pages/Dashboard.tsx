@@ -238,6 +238,20 @@ export default function Dashboard() {
     return '';
   };
 
+  const normalizeAnnouncementHref = (hrefRaw?: string) => {
+    const href = String(hrefRaw || '').trim();
+    if (!href) return '';
+    if (href.startsWith('#')) return href;
+    if (/^(https?:|mailto:|tel:)/i.test(href)) return href;
+    if (href.startsWith('//')) return `https:${href}`;
+    if (href.startsWith('/')) return href;
+    // Treat bare domains like example.com/path as external links.
+    if (/^[a-z0-9.-]+\.[a-z]{2,}([/:?#]|$)/i.test(href)) {
+      return `https://${href}`;
+    }
+    return href;
+  };
+
   const renderTableCellWithCodeTokens = (
     raw: string,
     codeMap: Record<string, { language: string; code: string }>
@@ -911,9 +925,18 @@ export default function Dashboard() {
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   components={{
-                    a: ({ ...props }) => (
-                      <a {...props} target="_blank" rel="noopener noreferrer" />
-                    ),
+                    a: ({ href, ...props }) => {
+                      const normalizedHref = normalizeAnnouncementHref(href);
+                      const isExternal = /^(https?:|mailto:|tel:)/i.test(normalizedHref);
+                      return (
+                        <a
+                          {...props}
+                          href={normalizedHref || href}
+                          target={isExternal ? '_blank' : undefined}
+                          rel={isExternal ? 'noopener noreferrer' : undefined}
+                        />
+                      );
+                    },
                     pre: ({ ...props }) => (
                       <pre
                         {...props}
