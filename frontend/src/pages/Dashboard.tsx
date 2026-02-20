@@ -9,6 +9,7 @@ import OverlayPortal from '../components/OverlayPortal';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
 import { buildSshGuide } from '../utils/sshGuide';
+import { readStoredSshClientConfig } from '../utils/sshClientConfig';
 
 interface MountConfig {
   host_path: string;
@@ -728,7 +729,11 @@ export default function Dashboard() {
       {sshGuideEnv && (
         <OverlayPortal className="p-4">
           {(() => {
-            const guide = buildSshGuide(sshGuideEnv);
+            const sshClient = readStoredSshClientConfig();
+            const guide = buildSshGuide(sshGuideEnv, {
+              username: sshClient.username,
+              port: sshClient.port,
+            });
             return (
           <div className="w-full max-w-2xl max-h-[85vh] rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-2xl animate-in fade-in zoom-in duration-200 overflow-hidden flex flex-col">
             <div className="p-6 border-b border-[var(--border)] flex justify-between items-center shrink-0">

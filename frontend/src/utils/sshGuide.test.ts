@@ -41,7 +41,20 @@ describe('buildSshGuide', () => {
     expect(guide.jumpAlias).toBe('lyra-host');
     expect(guide.envAlias).toBe('lyra-env-my-env');
     expect(guide.oneShotCommand).toContain('-p 22001 root@127.0.0.1');
+    expect(guide.oneShotCommand).toContain('-J <host-ssh-user>@127.0.0.1');
     expect(guide.sshConfig).toContain('ProxyJump lyra-host');
+    expect(guide.sshConfig).toContain('User <host-ssh-user>');
+    expect(guide.sshConfig).toContain('Port 22');
+  });
+
+  it('applies saved ssh client username/port for host jump config', () => {
+    const guide = buildSshGuide(baseEnv, {
+      username: 'lyra-admin',
+      port: '2222',
+    });
+    expect(guide.oneShotCommand).toContain('-J lyra-admin@127.0.0.1:2222');
+    expect(guide.sshConfig).toContain('User lyra-admin');
+    expect(guide.sshConfig).toContain('Port 2222');
   });
 
   it('uses container_user when provided', () => {
@@ -50,9 +63,14 @@ describe('buildSshGuide', () => {
       container_user: 'alice',
       worker_server_name: 'Worker 01',
       worker_server_base_url: 'http://10.0.0.5:8000',
+    }, {
+      username: 'ignored-user',
+      port: '2022',
     });
     expect(guide.targetUser).toBe('alice');
     expect(guide.jumpAlias).toBe('lyra-worker-worker-01');
     expect(guide.oneShotCommand).toContain('alice@127.0.0.1');
+    expect(guide.sshConfig).toContain('User <host-ssh-user>');
+    expect(guide.sshConfig).toContain('Port 22');
   });
 });

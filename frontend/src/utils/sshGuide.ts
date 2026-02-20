@@ -12,8 +12,15 @@ export interface SshGuideTemplate {
   targetUser: string;
   jumpAlias: string;
   envAlias: string;
+  jumpUser: string;
+  jumpPort: number;
   oneShotCommand: string;
   sshConfig: string;
+}
+
+export interface SshGuideClientInfo {
+  username?: string | null;
+  port?: string | number | null;
 }
 
 export const resolveSshHost = (env: SshGuideEnvironmentLike): string => {
@@ -42,19 +49,35 @@ const sanitizeSshAliasPart = (value: string): string => {
   return normalized || 'env';
 };
 
-export const buildSshGuide = (env: SshGuideEnvironmentLike): SshGuideTemplate => {
+const parseJumpPort = (value: string | number | null | undefined): number => {
+  const raw = String(value ?? '').trim();
+  if (!raw) return 22;
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed <= 0 || parsed > 65535) return 22;
+  return parsed;
+};
+
+export const buildSshGuide = (
+  env: SshGuideEnvironmentLike,
+  clientInfo?: SshGuideClientInfo,
+): SshGuideTemplate => {
   const jumpHost = resolveSshHost(env);
   const targetUser = env.container_user || 'root';
   const jumpAlias = env.worker_server_name
     ? `lyra-worker-${sanitizeSshAliasPart(env.worker_server_name)}`
     : 'lyra-host';
   const envAlias = `lyra-env-${sanitizeSshAliasPart(env.name || env.id)}`;
-  const oneShotCommand = `ssh -J <host-ssh-user>@${jumpHost} -p ${env.ssh_port} ${targetUser}@127.0.0.1`;
+  const applyHostClientInfo = !env.worker_server_name;
+  const jumpUserCandidate = String(clientInfo?.username || '').trim();
+  const jumpUser = applyHostClientInfo && jumpUserCandidate ? jumpUserCandidate : '<host-ssh-user>';
+  const jumpPort = applyHostClientInfo ? parseJumpPort(clientInfo?.port) : 22;
+  const jumpSpec = jumpPort !== 22 ? `${jumpUser}@${jumpHost}:${jumpPort}` : `${jumpUser}@${jumpHost}`;
+  const oneShotCommand = `ssh -J ${jumpSpec} -p ${env.ssh_port} ${targetUser}@127.0.0.1`;
   const sshConfig = [
     `Host ${jumpAlias}`,
     `  HostName ${jumpHost}`,
-    '  User <host-ssh-user>',
-    '  Port 22',
+    `  User ${jumpUser}`,
+    `  Port ${jumpPort}`,
     '',
     `Host ${envAlias}`,
     '  HostName 127.0.0.1',
@@ -68,6 +91,8 @@ export const buildSshGuide = (env: SshGuideEnvironmentLike): SshGuideTemplate =>
     targetUser,
     jumpAlias,
     envAlias,
+    jumpUser,
+    jumpPort,
     oneShotCommand,
     sshConfig,
   };
