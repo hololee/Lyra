@@ -497,6 +497,15 @@ export default function Dashboard() {
     }
   };
 
+  const copySshGuideValue = async (value: string, successMessage: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      showToast(successMessage, 'success');
+    } catch {
+      showToast(t('feedback.dashboard.sshGuideCopyFailed'), 'error');
+    }
+  };
+
   useEffect(() => {
     fetchEnvironments({ showLoading: true });
     const interval = setInterval(() => {
@@ -658,29 +667,54 @@ export default function Dashboard() {
           {(() => {
             const guide = buildSshGuide(sshGuideEnv);
             return (
-          <div className="w-full max-w-2xl rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-2xl animate-in fade-in zoom-in duration-200 overflow-hidden">
-            <div className="p-6 border-b border-[var(--border)] flex justify-between items-center">
+          <div className="w-full max-w-2xl max-h-[85vh] rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-2xl animate-in fade-in zoom-in duration-200 overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-[var(--border)] flex justify-between items-center shrink-0">
               <h3 className="text-lg font-bold text-[var(--text)]">{t('dashboard.sshAccessGuideTitle')}</h3>
               <button onClick={() => setSshGuideEnv(null)} className="text-[var(--text-muted)] hover:text-[var(--text)] transition-colors">
                 <X size={20} />
               </button>
             </div>
-            <div className="p-6 space-y-3">
+            <div className="p-6 space-y-3 overflow-y-auto">
               <p className="text-sm text-[var(--text-muted)]">{t('dashboard.sshAccessGuideFor', { name: sshGuideEnv.name })}</p>
               <p className="text-xs text-[var(--text-muted)]">
                 {t('dashboard.sshAccessGuideHostInfo', { host: guide.jumpHost, port: sshGuideEnv.ssh_port })}
               </p>
               <div className="rounded-md border border-[var(--border)] bg-[var(--bg-soft)] px-3 py-2">
-                <div className="text-[10px] uppercase tracking-wide text-[var(--text-muted)]">{t('dashboard.sshGuideOneShot')}</div>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-[10px] uppercase tracking-wide text-[var(--text-muted)]">{t('dashboard.sshGuideOneShot')}</div>
+                  <button
+                    type="button"
+                    onClick={() => void copySshGuideValue(guide.oneShotCommand, t('feedback.dashboard.sshGuideCommandCopied'))}
+                    className="rounded border border-[var(--border)] px-2 py-0.5 text-[10px] text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--bg-elevated)] transition-colors"
+                  >
+                    {t('dashboard.sshGuideCopyCommand')}
+                  </button>
+                </div>
                 <div className="mt-1 font-mono text-sm text-[var(--text)] break-all">{guide.oneShotCommand}</div>
               </div>
               <div className="rounded-md border border-[var(--border)] bg-[var(--bg-soft)] px-3 py-2">
-                <div className="text-[10px] uppercase tracking-wide text-[var(--text-muted)]">{t('dashboard.sshGuideConfigExample')}</div>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-[10px] uppercase tracking-wide text-[var(--text-muted)]">{t('dashboard.sshGuideConfigExample')}</div>
+                  <button
+                    type="button"
+                    onClick={() => void copySshGuideValue(guide.sshConfig, t('feedback.dashboard.sshGuideConfigCopied'))}
+                    className="rounded border border-[var(--border)] px-2 py-0.5 text-[10px] text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--bg-elevated)] transition-colors"
+                  >
+                    {t('dashboard.sshGuideCopyConfig')}
+                  </button>
+                </div>
                 <pre className="mt-1 whitespace-pre-wrap break-all font-mono text-xs text-[var(--text)]">{guide.sshConfig}</pre>
+              </div>
+              <div className="rounded-md border px-3 py-2 text-xs" style={{ borderColor: 'var(--warning-border)', backgroundColor: 'var(--warning-bg)', color: 'var(--warning-text)' }}>
+                <div className="font-medium" style={{ color: 'var(--warning-title)' }}>{t('dashboard.sshGuideNotes')}</div>
+                <ul className="mt-1 list-disc pl-4 space-y-1">
+                  <li>{t('dashboard.sshGuideRootWarning')}</li>
+                  <li>{t('dashboard.sshGuidePlaceholderWarning')}</li>
+                </ul>
               </div>
               <p className="text-xs text-[var(--text-muted)]">{t('dashboard.sshGuideAliases', { jumpAlias: guide.jumpAlias, envAlias: guide.envAlias })}</p>
             </div>
-            <div className="p-4 border-t border-[var(--border)] bg-[var(--bg-soft)] flex justify-end">
+            <div className="p-4 border-t border-[var(--border)] bg-[var(--bg-soft)] flex justify-end shrink-0">
               <button
                 onClick={() => setSshGuideEnv(null)}
                 className="rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-4 py-2 text-sm text-[var(--text)] hover:brightness-95 transition-colors"
