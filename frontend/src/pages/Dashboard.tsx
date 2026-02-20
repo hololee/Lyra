@@ -735,6 +735,7 @@ export default function Dashboard() {
               username: sshClient.username,
               port: sshClient.port,
             });
+            const showSshGuideNotes = !sshGuideEnv.worker_server_name && !String(sshClient.username || '').trim();
             return (
           <div className="w-full max-w-2xl max-h-[85vh] rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-2xl animate-in fade-in zoom-in duration-200 overflow-hidden flex flex-col">
             <div className="p-6 border-b border-[var(--border)] flex justify-between items-center shrink-0">
@@ -774,13 +775,15 @@ export default function Dashboard() {
                 </div>
                 <pre className="mt-1 whitespace-pre-wrap break-all font-mono text-xs text-[var(--text)]">{guide.sshConfig}</pre>
               </div>
-              <div className="rounded-md border px-3 py-2 text-xs" style={{ borderColor: 'var(--warning-border)', backgroundColor: 'var(--warning-bg)', color: 'var(--warning-text)' }}>
-                <div className="font-medium" style={{ color: 'var(--warning-title)' }}>{t('dashboard.sshGuideNotes')}</div>
-                <ul className="mt-1 list-disc pl-4 space-y-1">
-                  <li>{t('dashboard.sshGuideRootWarning')}</li>
-                  <li>{t('dashboard.sshGuidePlaceholderWarning')}</li>
-                </ul>
-              </div>
+              {showSshGuideNotes && (
+                <div className="rounded-md border px-3 py-2 text-xs" style={{ borderColor: 'var(--warning-border)', backgroundColor: 'var(--warning-bg)', color: 'var(--warning-text)' }}>
+                  <div className="font-medium" style={{ color: 'var(--warning-title)' }}>{t('dashboard.sshGuideNotes')}</div>
+                  <ul className="mt-1 list-disc pl-4 space-y-1">
+                    <li>{t('dashboard.sshGuideRootWarning')}</li>
+                    <li>{t('dashboard.sshGuidePlaceholderWarning')}</li>
+                  </ul>
+                </div>
+              )}
               <div className="rounded-md border border-[var(--border)] bg-[var(--bg-soft)] px-3 py-3 space-y-2">
                 <div className="text-[10px] uppercase tracking-wide text-[var(--text-muted)]">{t('dashboard.rootAccountSectionTitle')}</div>
                 <div className="text-xs text-[var(--text-muted)]">{t('dashboard.rootAccountSectionDescription')}</div>
