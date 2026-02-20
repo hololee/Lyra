@@ -50,6 +50,8 @@ const MANAGED_CODE_START = '# >>> LYRA_MANAGED_CODE_SERVER_START';
 const MANAGED_CODE_END = '# <<< LYRA_MANAGED_CODE_SERVER_END';
 const MANAGED_SSH_START = '# >>> LYRA_MANAGED_SSH_START';
 const MANAGED_SSH_END = '# <<< LYRA_MANAGED_SSH_END';
+const MANAGED_ZSH_START = '# >>> LYRA_MANAGED_ZSH_START';
+const MANAGED_ZSH_END = '# <<< LYRA_MANAGED_ZSH_END';
 
 const normalizeDockerfile = (text: string): string => {
   const normalized = text
@@ -63,6 +65,7 @@ const stripManagedBlocks = (text: string): string => {
   if (!text) return '';
   let next = text;
   const patterns = [
+    new RegExp(`${MANAGED_ZSH_START}[\\s\\S]*?${MANAGED_ZSH_END}\\n?`, 'g'),
     new RegExp(`${MANAGED_SSH_START}[\\s\\S]*?${MANAGED_SSH_END}\\n?`, 'g'),
     new RegExp(`${MANAGED_JUPYTER_START}[\\s\\S]*?${MANAGED_JUPYTER_END}\\n?`, 'g'),
     new RegExp(`${MANAGED_CODE_START}[\\s\\S]*?${MANAGED_CODE_END}\\n?`, 'g'),
@@ -75,6 +78,13 @@ const stripManagedBlocks = (text: string): string => {
 
 const buildManagedBlocks = (enableJupyter: boolean, enableCodeServer: boolean): string => {
   const blocks: string[] = [
+    `${MANAGED_ZSH_START}`,
+    '# Managed by Lyra provisioning runtime requirements',
+    'RUN apt-get update && apt-get install -y --no-install-recommends zsh passwd && \\',
+    '    rm -rf /var/lib/apt/lists/* && \\',
+    '    ZSH_BIN="$(command -v zsh || true)" && \\',
+    '    if [ -n "$ZSH_BIN" ] && command -v chsh >/dev/null 2>&1; then chsh -s "$ZSH_BIN" root || true; fi',
+    `${MANAGED_ZSH_END}`,
     `${MANAGED_SSH_START}`,
     '# Managed by Lyra provisioning runtime requirements',
     'RUN apt-get update && apt-get install -y --no-install-recommends openssh-server passwd && \\',
