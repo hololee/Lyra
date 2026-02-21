@@ -893,10 +893,7 @@ export default function Dashboard() {
         <OverlayPortal>
             <div className="bg-[var(--bg-elevated)] rounded-xl border border-[var(--border)] shadow-2xl w-full max-w-lg max-h-[85vh] overflow-hidden animate-in fade-in zoom-in duration-200 flex flex-col">
                 <div className="p-6 border-b border-[var(--border)] flex justify-between items-center shrink-0">
-                    <h3 className="text-xl font-bold text-[var(--text)] flex items-center gap-2">
-                        <HardDrive size={20} className="text-blue-400" />
-                        {t('dashboard.volumeMounts')}
-                    </h3>
+                    <h3 className="text-xl font-bold text-[var(--text)]">{t('dashboard.volumeMounts')}</h3>
                     <button onClick={() => setSelectedVolEnv(null)} className="text-[var(--text-muted)] hover:text-[var(--text)] transition-colors">
                         <X size={20} />
                     </button>
@@ -938,10 +935,7 @@ export default function Dashboard() {
         <OverlayPortal>
             <div className="bg-[var(--bg-elevated)] rounded-xl border border-[var(--border)] shadow-2xl w-full max-w-lg max-h-[85vh] overflow-hidden animate-in fade-in zoom-in duration-200 flex flex-col">
                 <div className="p-6 border-b border-[var(--border)] flex justify-between items-center shrink-0">
-                    <h3 className="text-xl font-bold text-[var(--text)] flex items-center gap-2">
-                        <Network size={20} className="text-cyan-400" />
-                        {t('dashboard.customPortMappings')}
-                    </h3>
+                    <h3 className="text-xl font-bold text-[var(--text)]">{t('dashboard.customPortMappings')}</h3>
                     <button onClick={() => setSelectedPortEnv(null)} className="text-[var(--text-muted)] hover:text-[var(--text)] transition-colors">
                         <X size={20} />
                     </button>
