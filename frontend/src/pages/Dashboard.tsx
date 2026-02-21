@@ -1191,7 +1191,7 @@ export default function Dashboard() {
                                       <span className="block truncate whitespace-nowrap text-[var(--text)] font-medium">
                                         {env.name}
                                       </span>
-                                      <div className="pointer-events-none absolute left-0 top-full z-20 mt-1 hidden max-w-[420px] rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-xs text-[var(--text)] shadow-lg group-hover:block">
+                                      <div className="pointer-events-none absolute left-0 top-[-34px] z-20 max-w-[420px] rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-xs text-[var(--text)] opacity-0 shadow-lg transition-opacity duration-100 group-hover:opacity-100">
                                         {env.name}
                                       </div>
                                     </div>
@@ -1278,85 +1278,106 @@ export default function Dashboard() {
                                           env.status === 'creating' ||
                                           env.status === 'building';
                                         const isRunning = env.status === 'running';
+                                        const actionTitle = isRunning ? t('dashboard.stopInstance') : t('dashboard.startInstance');
                                         return (
+                                          <div className="inline-block relative group">
                                             <button
-                                                onClick={() => {
-                                                    if (isRunning) {
-                                                        stopEnvironment(env);
-                                                    } else {
-                                                        startEnvironment(env);
-                                                    }
-                                                }}
-                                                disabled={actionLoading[env.id] || isTransitioning}
-                                                className={`p-2 rounded-lg transition-colors ${
-                                                    isRunning
-                                                    ? "hover:bg-[var(--bg-soft)] text-[var(--text-muted)] hover:text-yellow-400"
-                                                    : "hover:bg-[var(--bg-soft)] text-[var(--text-muted)] hover:text-green-400"
-                                                } ${actionLoading[env.id] ? "animate-pulse opacity-80" : ""}`}
-                                                title={isRunning ? t('dashboard.stopInstance') : t('dashboard.startInstance')}
-                                            >
-                                                {actionLoading[env.id] || isTransitioning
-                                                    ? <RefreshCw size={18} className="animate-spin" />
-                                                    : isRunning
-                                                        ? <Pause size={18} fill="currentColor" className="opacity-80" />
-                                                        : <Play size={18} fill="currentColor" />
+                                              onClick={() => {
+                                                if (isRunning) {
+                                                  stopEnvironment(env);
+                                                } else {
+                                                  startEnvironment(env);
                                                 }
+                                              }}
+                                              disabled={actionLoading[env.id] || isTransitioning}
+                                              className={`p-2 rounded-lg transition-colors ${
+                                                isRunning
+                                                  ? "hover:bg-[var(--bg-soft)] text-[var(--text-muted)] hover:text-yellow-400"
+                                                  : "hover:bg-[var(--bg-soft)] text-[var(--text-muted)] hover:text-green-400"
+                                              } ${actionLoading[env.id] ? "animate-pulse opacity-80" : ""}`}
+                                            >
+                                              {actionLoading[env.id] || isTransitioning
+                                                ? <RefreshCw size={18} className="animate-spin" />
+                                                : isRunning
+                                                  ? <Pause size={18} fill="currentColor" className="opacity-80" />
+                                                  : <Play size={18} fill="currentColor" />
+                                              }
                                             </button>
+                                            <div className="pointer-events-none absolute left-1/2 top-[-34px] -translate-x-1/2 whitespace-nowrap rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-xs text-[var(--text)] opacity-0 shadow-lg transition-opacity duration-100 group-hover:opacity-100">
+                                              {actionTitle}
+                                            </div>
+                                          </div>
                                         );
                                     })()}
-                                    <button
+                                    <div className="inline-block relative group">
+                                      <button
                                         onClick={() => {
-                                            if (env.mount_config && env.mount_config.length > 0) {
-                                                setSelectedVolEnv(env);
-                                            }
+                                          if (env.mount_config && env.mount_config.length > 0) {
+                                            setSelectedVolEnv(env);
+                                          }
                                         }}
                                         disabled={!env.mount_config || env.mount_config.length === 0}
                                         className={`p-2 rounded-lg transition-colors ${
-                                            env.mount_config && env.mount_config.length > 0
+                                          env.mount_config && env.mount_config.length > 0
                                             ? "text-[var(--text-muted)] hover:text-blue-400 hover:bg-blue-500/10"
                                             : "text-[var(--text-muted)] cursor-not-allowed opacity-30"
                                         }`}
-                                        title={env.mount_config && env.mount_config.length > 0 ? t('dashboard.viewVolumes') : t('dashboard.noVolumes')}
-                                    >
+                                      >
                                         <HardDrive size={18} />
-                                    </button>
-                                    <button
+                                      </button>
+                                      <div className="pointer-events-none absolute left-1/2 top-[-34px] -translate-x-1/2 whitespace-nowrap rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-xs text-[var(--text)] opacity-0 shadow-lg transition-opacity duration-100 group-hover:opacity-100">
+                                        {env.mount_config && env.mount_config.length > 0 ? t('dashboard.viewVolumes') : t('dashboard.noVolumes')}
+                                      </div>
+                                    </div>
+                                    <div className="inline-block relative group">
+                                      <button
                                         onClick={() => {
-                                            if (env.custom_ports && env.custom_ports.length > 0) {
-                                                setSelectedPortEnv(env);
-                                            }
+                                          if (env.custom_ports && env.custom_ports.length > 0) {
+                                            setSelectedPortEnv(env);
+                                          }
                                         }}
                                         disabled={!env.custom_ports || env.custom_ports.length === 0}
                                         className={`p-2 rounded-lg transition-colors ${
-                                            env.custom_ports && env.custom_ports.length > 0
+                                          env.custom_ports && env.custom_ports.length > 0
                                             ? "text-[var(--text-muted)] hover:text-cyan-400 hover:bg-cyan-500/10"
                                             : "text-[var(--text-muted)] cursor-not-allowed opacity-30"
                                         }`}
-                                        title={env.custom_ports && env.custom_ports.length > 0 ? t('dashboard.viewCustomPorts') : t('dashboard.noCustomPorts')}
-                                    >
+                                      >
                                         <Network size={18} />
-                                    </button>
-                                    <button
+                                      </button>
+                                      <div className="pointer-events-none absolute left-1/2 top-[-34px] -translate-x-1/2 whitespace-nowrap rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-xs text-[var(--text)] opacity-0 shadow-lg transition-opacity duration-100 group-hover:opacity-100">
+                                        {env.custom_ports && env.custom_ports.length > 0 ? t('dashboard.viewCustomPorts') : t('dashboard.noCustomPorts')}
+                                      </div>
+                                    </div>
+                                    <div className="inline-block relative group">
+                                      <button
                                         onClick={() => openRootPasswordResetModal(env)}
                                         disabled={env.status !== 'running'}
                                         className={`p-2 rounded-lg transition-colors ${
-                                            env.status === 'running'
+                                          env.status === 'running'
                                             ? 'text-[var(--text-muted)] hover:text-red-400 hover:bg-[var(--bg-soft)]'
                                             : 'text-[var(--text-muted)] cursor-not-allowed opacity-30'
                                         }`}
-                                        title={env.status === 'running'
+                                      >
+                                        <KeyRound size={18} />
+                                      </button>
+                                      <div className="pointer-events-none absolute left-1/2 top-[-34px] -translate-x-1/2 whitespace-nowrap rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-xs text-[var(--text)] opacity-0 shadow-lg transition-opacity duration-100 group-hover:opacity-100">
+                                        {env.status === 'running'
                                           ? t('dashboard.rootPasswordResetAction')
                                           : t('dashboard.environmentMustBeRunning', { port: env.ssh_port })}
-                                    >
-                                        <KeyRound size={18} />
-                                    </button>
-                                    <button
+                                      </div>
+                                    </div>
+                                    <div className="inline-block relative group">
+                                      <button
                                         onClick={() => setDeleteId(env.id)}
                                         className="p-2 hover:bg-[var(--bg-soft)] rounded-lg text-[var(--text-muted)] hover:text-red-400 transition-colors"
-                                        title={t('actions.delete')}
-                                    >
+                                      >
                                         <Trash2 size={18} />
-                                    </button>
+                                      </button>
+                                      <div className="pointer-events-none absolute left-1/2 top-[-34px] -translate-x-1/2 whitespace-nowrap rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-xs text-[var(--text)] opacity-0 shadow-lg transition-opacity duration-100 group-hover:opacity-100">
+                                        {t('actions.delete')}
+                                      </div>
+                                    </div>
                                 </td>
                             </tr>
                         ))}
