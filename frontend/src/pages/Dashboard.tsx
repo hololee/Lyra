@@ -507,7 +507,28 @@ export default function Dashboard() {
     try {
       await navigator.clipboard.writeText(value);
       showToast(successMessage, 'success');
+      return;
     } catch {
+      // Fallback for non-secure contexts (e.g., HTTP) where Clipboard API is blocked.
+      try {
+        const textarea = document.createElement('textarea');
+        textarea.value = value;
+        textarea.setAttribute('readonly', 'true');
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        textarea.style.pointerEvents = 'none';
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        const copied = document.execCommand('copy');
+        document.body.removeChild(textarea);
+        if (copied) {
+          showToast(successMessage, 'success');
+          return;
+        }
+      } catch {
+        // fall through to error toast
+      }
       showToast(t('feedback.dashboard.sshGuideCopyFailed'), 'error');
     }
   };
