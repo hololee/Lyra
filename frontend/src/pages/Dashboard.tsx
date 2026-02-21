@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { ChevronDown, ChevronUp, Code2, Eye, EyeOff, HardDrive, HelpCircle, LayoutTemplate, Network, Play, RefreshCw, Square, SquareTerminal, Trash2, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, Code2, Eye, EyeOff, HardDrive, HelpCircle, KeyRound, LayoutTemplate, Network, Play, RefreshCw, Square, SquareTerminal, Trash2, X } from 'lucide-react';
 import { isValidElement, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -88,6 +88,7 @@ export default function Dashboard() {
   const [errorLog, setErrorLog] = useState<string>("");
   const [logLoading, setLogLoading] = useState(false);
   const [sshGuideEnv, setSshGuideEnv] = useState<Environment | null>(null);
+  const [rootResetEnv, setRootResetEnv] = useState<Environment | null>(null);
   const [rootResetPassword, setRootResetPassword] = useState('');
   const [rootResetInputError, setRootResetInputError] = useState('');
   const [showRootResetPassword, setShowRootResetPassword] = useState(false);
@@ -447,6 +448,13 @@ export default function Dashboard() {
     setSshGuideEnv(env);
   };
 
+  const openRootPasswordResetModal = (env: Environment) => {
+    setRootResetEnv(env);
+    setRootResetPassword('');
+    setRootResetInputError('');
+    setShowRootResetPassword(false);
+  };
+
   const openJupyter = async (env: Environment) => {
     try {
       const res = await axios.post(`environments/${env.id}/jupyter/launch`);
@@ -534,7 +542,7 @@ export default function Dashboard() {
   };
 
   const requestRootPasswordReset = () => {
-    if (!sshGuideEnv) return;
+    if (!rootResetEnv) return;
     const password = rootResetPassword;
     if (!password.trim()) {
       setRootResetInputError(t('feedback.dashboard.rootPasswordRequired'));
@@ -545,7 +553,7 @@ export default function Dashboard() {
       return;
     }
     setRootResetInputError('');
-    setRootResetConfirm({ envId: sshGuideEnv.id, name: sshGuideEnv.name, password });
+    setRootResetConfirm({ envId: rootResetEnv.id, name: rootResetEnv.name, password });
   };
 
   const submitRootPasswordReset = async () => {
@@ -558,6 +566,8 @@ export default function Dashboard() {
       showToast(t('feedback.dashboard.rootPasswordResetSuccess'), 'success');
       setRootResetPassword('');
       setRootResetInputError('');
+      setShowRootResetPassword(false);
+      setRootResetEnv(null);
       await fetchEnvironments();
     } catch (error: unknown) {
       const { code, message } = getApiErrorCodeAndMessage(error);
@@ -619,7 +629,7 @@ export default function Dashboard() {
     setRootResetPassword('');
     setRootResetInputError('');
     setShowRootResetPassword(false);
-  }, [sshGuideEnv?.id]);
+  }, [rootResetEnv?.id]);
 
   const renderAccessCell = (env: Environment): ReactNode => {
     const hasWorkerError = Boolean(env.worker_server_name && (env.worker_error_code || env.worker_error_message));
@@ -808,43 +818,6 @@ export default function Dashboard() {
                 </div>
                 <pre className="mt-1 whitespace-pre-wrap break-all font-mono text-xs text-[var(--text)]">{guide.sshConfig}</pre>
               </div>
-              <div className="rounded-md border border-[var(--border)] bg-[var(--bg-soft)] px-3 py-3 space-y-2">
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">{t('dashboard.rootAccountSectionTitle')}</div>
-                <div className="text-xs text-[var(--text-muted)]">{t('dashboard.rootAccountSectionDescription')}</div>
-                <div className="flex items-center gap-2">
-                  <div className="flex min-w-0 flex-1 items-center rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1.5 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500/20">
-                    <input
-                      type={showRootResetPassword ? 'text' : 'password'}
-                      value={rootResetPassword}
-                      onChange={(event) => {
-                        setRootResetPassword(event.target.value);
-                        if (rootResetInputError) setRootResetInputError('');
-                      }}
-                      placeholder={t('dashboard.rootPasswordResetInputPlaceholder')}
-                      className="min-w-0 flex-1 bg-transparent px-1 text-sm text-[var(--text)] focus:outline-none"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowRootResetPassword((prev) => !prev)}
-                      className="shrink-0 rounded p-1 text-[var(--text-muted)] hover:bg-[var(--bg-soft)] hover:text-[var(--text)] transition-colors"
-                      aria-label={showRootResetPassword ? t('actions.hide') : t('actions.show')}
-                    >
-                      {showRootResetPassword ? <EyeOff size={14} /> : <Eye size={14} />}
-                    </button>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={requestRootPasswordReset}
-                    disabled={rootResetSubmitting}
-                    className="shrink-0 rounded-lg bg-red-600/90 px-3 py-1.5 text-xs font-medium text-white transition-all hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {t('dashboard.rootPasswordResetAction')}
-                  </button>
-                </div>
-                {rootResetInputError && (
-                  <p className="text-xs text-red-500">{rootResetInputError}</p>
-                )}
-              </div>
             </div>
             <div className="p-4 border-t border-[var(--border)] bg-[var(--bg-soft)] flex justify-end shrink-0">
               <button
@@ -857,6 +830,61 @@ export default function Dashboard() {
           </div>
             );
           })()}
+        </OverlayPortal>
+      )}
+
+      {rootResetEnv && (
+        <OverlayPortal className="p-4">
+          <div className="w-full max-w-lg rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-2xl animate-in fade-in zoom-in duration-200 overflow-hidden">
+            <div className="p-6 border-b border-[var(--border)] flex justify-between items-center">
+              <div>
+                <h3 className="text-lg font-bold text-[var(--text)]">{t('dashboard.rootAccountSectionTitle')}</h3>
+                <p className="text-sm text-[var(--text-muted)] mt-1">{t('dashboard.rootPasswordResetConfirmMessage', { name: rootResetEnv.name })}</p>
+              </div>
+              <button onClick={() => setRootResetEnv(null)} className="text-[var(--text-muted)] hover:text-[var(--text)] transition-colors">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6 space-y-3">
+              <div className="flex min-w-0 items-center rounded-lg border border-[var(--border)] bg-[var(--bg-soft)] px-2 py-1.5 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500/20">
+                <input
+                  type={showRootResetPassword ? 'text' : 'password'}
+                  value={rootResetPassword}
+                  onChange={(event) => {
+                    setRootResetPassword(event.target.value);
+                    if (rootResetInputError) setRootResetInputError('');
+                  }}
+                  placeholder={t('dashboard.rootPasswordResetInputPlaceholder')}
+                  className="min-w-0 flex-1 bg-transparent px-1 text-sm text-[var(--text)] focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowRootResetPassword((prev) => !prev)}
+                  className="shrink-0 rounded p-1 text-[var(--text-muted)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text)] transition-colors"
+                  aria-label={showRootResetPassword ? t('actions.hide') : t('actions.show')}
+                >
+                  {showRootResetPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
+              </div>
+              {rootResetInputError && <p className="text-xs text-red-500">{rootResetInputError}</p>}
+            </div>
+            <div className="p-4 border-t border-[var(--border)] bg-[var(--bg-soft)] flex justify-end gap-2">
+              <button
+                onClick={() => setRootResetEnv(null)}
+                className="rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-4 py-2 text-sm text-[var(--text)] hover:brightness-95 transition-colors"
+              >
+                {t('actions.cancel')}
+              </button>
+              <button
+                type="button"
+                onClick={requestRootPasswordReset}
+                disabled={rootResetSubmitting}
+                className="rounded-lg bg-red-600/90 px-4 py-2 text-sm font-medium text-white transition-all hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {t('dashboard.rootPasswordResetAction')}
+              </button>
+            </div>
+          </div>
         </OverlayPortal>
       )}
 
@@ -1307,6 +1335,20 @@ export default function Dashboard() {
                                         title={env.custom_ports && env.custom_ports.length > 0 ? t('dashboard.viewCustomPorts') : t('dashboard.noCustomPorts')}
                                     >
                                         <Network size={18} />
+                                    </button>
+                                    <button
+                                        onClick={() => openRootPasswordResetModal(env)}
+                                        disabled={env.status !== 'running'}
+                                        className={`p-2 rounded-lg transition-colors ${
+                                            env.status === 'running'
+                                            ? 'text-[var(--text-muted)] hover:text-red-400 hover:bg-[var(--bg-soft)]'
+                                            : 'text-[var(--text-muted)] cursor-not-allowed opacity-30'
+                                        }`}
+                                        title={env.status === 'running'
+                                          ? t('dashboard.rootPasswordResetAction')
+                                          : t('dashboard.environmentMustBeRunning', { port: env.ssh_port })}
+                                    >
+                                        <KeyRound size={18} />
                                     </button>
                                     <button
                                         onClick={() => setDeleteId(env.id)}
