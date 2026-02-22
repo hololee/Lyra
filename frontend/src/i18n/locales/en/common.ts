@@ -220,6 +220,7 @@ const enCommon = {
     optionalServicesDescription: 'Selected services are inserted as managed Dockerfile blocks.',
     enableJupyter: 'Enable JupyterLab',
     enableCodeServer: 'Enable code-server',
+    enableOhMyZsh: 'Install Oh My Zsh',
     managedServiceBlocks: 'Managed Service Blocks',
     managedBlockLockedNotice: 'Managed service blocks are read-only and updated from the checkboxes.',
     loadTemplateTitle: 'Load Template',

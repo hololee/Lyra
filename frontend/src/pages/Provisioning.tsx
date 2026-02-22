@@ -52,6 +52,8 @@ const MANAGED_SSH_START = '# >>> LYRA_MANAGED_SSH_START';
 const MANAGED_SSH_END = '# <<< LYRA_MANAGED_SSH_END';
 const MANAGED_ZSH_START = '# >>> LYRA_MANAGED_ZSH_START';
 const MANAGED_ZSH_END = '# <<< LYRA_MANAGED_ZSH_END';
+const MANAGED_OH_MY_ZSH_START = '# >>> LYRA_MANAGED_OH_MY_ZSH_START';
+const MANAGED_OH_MY_ZSH_END = '# <<< LYRA_MANAGED_OH_MY_ZSH_END';
 
 const normalizeDockerfile = (text: string): string => {
   const normalized = text
@@ -65,6 +67,7 @@ const stripManagedBlocks = (text: string): string => {
   if (!text) return '';
   let next = text;
   const patterns = [
+    new RegExp(`${MANAGED_OH_MY_ZSH_START}[\\s\\S]*?${MANAGED_OH_MY_ZSH_END}\\n?`, 'g'),
     new RegExp(`${MANAGED_ZSH_START}[\\s\\S]*?${MANAGED_ZSH_END}\\n?`, 'g'),
     new RegExp(`${MANAGED_SSH_START}[\\s\\S]*?${MANAGED_SSH_END}\\n?`, 'g'),
     new RegExp(`${MANAGED_JUPYTER_START}[\\s\\S]*?${MANAGED_JUPYTER_END}\\n?`, 'g'),
@@ -76,7 +79,7 @@ const stripManagedBlocks = (text: string): string => {
   return normalizeDockerfile(next);
 };
 
-const buildManagedBlocks = (enableJupyter: boolean, enableCodeServer: boolean): string => {
+const buildManagedBlocks = (enableJupyter: boolean, enableCodeServer: boolean, enableOhMyZsh: boolean): string => {
   const blocks: string[] = [
     `${MANAGED_ZSH_START}`,
     '# Managed by Lyra provisioning runtime requirements',
@@ -92,6 +95,18 @@ const buildManagedBlocks = (enableJupyter: boolean, enableCodeServer: boolean): 
     '    mkdir -p /var/run/sshd /etc/ssh',
     `${MANAGED_SSH_END}`,
   ];
+  if (enableOhMyZsh) {
+    blocks.push(
+      `${MANAGED_OH_MY_ZSH_START}`,
+      '# Managed by Lyra provisioning optional service toggle',
+      'RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates git && \\',
+      '    rm -rf /var/lib/apt/lists/* && \\',
+      '    export RUNZSH=no CHSH=no KEEP_ZSHRC=yes && \\',
+      '    sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended && \\',
+      '    test -d /root/.oh-my-zsh',
+      `${MANAGED_OH_MY_ZSH_END}`
+    );
+  }
   if (enableJupyter) {
     blocks.push(
       `${MANAGED_JUPYTER_START}`,
@@ -118,9 +133,14 @@ const buildManagedBlocks = (enableJupyter: boolean, enableCodeServer: boolean): 
   return blocks.join('\n');
 };
 
-const composeDockerfile = (userDockerfile: string, enableJupyter: boolean, enableCodeServer: boolean): string => {
+const composeDockerfile = (
+  userDockerfile: string,
+  enableJupyter: boolean,
+  enableCodeServer: boolean,
+  enableOhMyZsh: boolean
+): string => {
   const userPart = stripManagedBlocks(userDockerfile).trimEnd();
-  const managedPart = buildManagedBlocks(enableJupyter, enableCodeServer);
+  const managedPart = buildManagedBlocks(enableJupyter, enableCodeServer, enableOhMyZsh);
   if (!managedPart) {
     return `${userPart}\n`;
   }
@@ -158,6 +178,7 @@ export default function Provisioning() {
   const [userDockerfile, setUserDockerfile] = useState('FROM python:3.11-slim\n');
   const [enableJupyter, setEnableJupyter] = useState(true);
   const [enableCodeServer, setEnableCodeServer] = useState(true);
+  const [enableOhMyZsh, setEnableOhMyZsh] = useState(false);
   const isWorkerSelectable = useCallback((worker: WorkerServerOption) => {
     return String(worker.last_health_status || '').toLowerCase() === 'healthy';
   }, []);
@@ -433,12 +454,12 @@ export default function Provisioning() {
   };
 
   const renderedDockerfile = useMemo(
-    () => composeDockerfile(userDockerfile, enableJupyter, enableCodeServer),
-    [userDockerfile, enableJupyter, enableCodeServer]
+    () => composeDockerfile(userDockerfile, enableJupyter, enableCodeServer, enableOhMyZsh),
+    [userDockerfile, enableJupyter, enableCodeServer, enableOhMyZsh]
   );
   const managedBlocksText = useMemo(
-    () => normalizeDockerfile(buildManagedBlocks(enableJupyter, enableCodeServer)),
-    [enableJupyter, enableCodeServer]
+    () => normalizeDockerfile(buildManagedBlocks(enableJupyter, enableCodeServer, enableOhMyZsh)),
+    [enableJupyter, enableCodeServer, enableOhMyZsh]
   );
   // Error State
   const [errors, setErrors] = useState<{name?: string, password?: string, dockerfile?: string}>({});
@@ -997,6 +1018,15 @@ export default function Provisioning() {
                   type="checkbox"
                   checked={enableCodeServer}
                   onChange={(e) => setEnableCodeServer(e.target.checked)}
+                  className="h-4 w-4 rounded border-[var(--border)] bg-[var(--bg-elevated)] text-blue-600 focus:ring-blue-500"
+                />
+              </label>
+              <label className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--bg-soft)] px-3 py-2.5 cursor-pointer">
+                <span className="text-sm text-[var(--text)]">{t('provisioning.enableOhMyZsh')}</span>
+                <input
+                  type="checkbox"
+                  checked={enableOhMyZsh}
+                  onChange={(e) => setEnableOhMyZsh(e.target.checked)}
                   className="h-4 w-4 rounded border-[var(--border)] bg-[var(--bg-elevated)] text-blue-600 focus:ring-blue-500"
                 />
               </label>
