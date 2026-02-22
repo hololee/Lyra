@@ -176,9 +176,9 @@ export default function Provisioning() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isInitializingTargets, setIsInitializingTargets] = useState(true);
   const [userDockerfile, setUserDockerfile] = useState('FROM python:3.11-slim\n');
-  const [enableJupyter, setEnableJupyter] = useState(true);
-  const [enableCodeServer, setEnableCodeServer] = useState(true);
-  const [enableOhMyZsh, setEnableOhMyZsh] = useState(false);
+  const [enableJupyter, setEnableJupyter] = useState(false);
+  const [enableCodeServer, setEnableCodeServer] = useState(false);
+  const [enableOhMyZsh, setEnableOhMyZsh] = useState(true);
   const isWorkerSelectable = useCallback((worker: WorkerServerOption) => {
     return String(worker.last_health_status || '').toLowerCase() === 'healthy';
   }, []);
@@ -1004,6 +1004,15 @@ export default function Provisioning() {
             <p className="text-xs text-[var(--text-muted)]">{t('provisioning.optionalServicesDescription')}</p>
             <div className="space-y-3">
               <label className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--bg-soft)] px-3 py-2.5 cursor-pointer">
+                <span className="text-sm text-[var(--text)]">{t('provisioning.enableOhMyZsh')}</span>
+                <input
+                  type="checkbox"
+                  checked={enableOhMyZsh}
+                  onChange={(e) => setEnableOhMyZsh(e.target.checked)}
+                  className="h-4 w-4 rounded border-[var(--border)] bg-[var(--bg-elevated)] text-blue-600 focus:ring-blue-500"
+                />
+              </label>
+              <label className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--bg-soft)] px-3 py-2.5 cursor-pointer">
                 <span className="text-sm text-[var(--text)]">{t('provisioning.enableJupyter')}</span>
                 <input
                   type="checkbox"
@@ -1018,15 +1027,6 @@ export default function Provisioning() {
                   type="checkbox"
                   checked={enableCodeServer}
                   onChange={(e) => setEnableCodeServer(e.target.checked)}
-                  className="h-4 w-4 rounded border-[var(--border)] bg-[var(--bg-elevated)] text-blue-600 focus:ring-blue-500"
-                />
-              </label>
-              <label className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--bg-soft)] px-3 py-2.5 cursor-pointer">
-                <span className="text-sm text-[var(--text)]">{t('provisioning.enableOhMyZsh')}</span>
-                <input
-                  type="checkbox"
-                  checked={enableOhMyZsh}
-                  onChange={(e) => setEnableOhMyZsh(e.target.checked)}
                   className="h-4 w-4 rounded border-[var(--border)] bg-[var(--bg-elevated)] text-blue-600 focus:ring-blue-500"
                 />
               </label>
