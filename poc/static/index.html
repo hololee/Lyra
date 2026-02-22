@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LangGraph Provisioning POC</title>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <main class="layout">
+      <section class="panel">
+        <h1>LangGraph Provisioning POC</h1>
+        <div class="row"><span id="modelBadge"></span><span id="phaseBadge"></span></div>
+        <div id="chat" class="chat"></div>
+        <form id="chatForm" class="composer">
+          <input id="messageInput" type="text" placeholder="예: 20B 모델 파인튜닝" autocomplete="off" />
+          <button type="submit">Send</button>
+          <button id="resetBtn" type="button">Reset</button>
+        </form>
+      </section>
+      <section class="panel side">
+        <h2>Infra</h2>
+        <label>Mode
+          <select id="targetMode">
+            <option value="both">Host + Worker</option>
+            <option value="host_only">Host only</option>
+          </select>
+        </label>
+        <label>Host GPU
+          <input id="hostGpu" type="number" min="0" step="1" value="1" />
+        </label>
+        <label>Worker GPU
+          <input id="workerGpu" type="number" min="0" step="1" value="4" />
+        </label>
+        <label>Language
+          <select id="langSel">
+            <option value="ko">Korean</option>
+            <option value="en">English</option>
+          </select>
+        </label>
+        <button id="applyInfra" type="button">Apply Infra</button>
+
+        <h2>Goal</h2>
+        <pre id="goalView"></pre>
+        <h2>Draft</h2>
+        <pre id="draftView"></pre>
+        <h2>Violations</h2>
+        <pre id="violationsView"></pre>
+        <h2>LLM</h2>
+        <pre id="llmView"></pre>
+      </section>
+    </main>
+    <script type="module" src="/static/app.js"></script>
+  </body>
+</html>
